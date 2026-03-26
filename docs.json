@@ -280,6 +280,11 @@
     "indexing": "navigable"
   },
 
+  "contextual": {
+    "display": "header",
+    "options": ["copy", "claude", "chatgpt", "cursor"]
+  },
+
   "search": {
     "prompt": "Search Mandate docs..."
   },
