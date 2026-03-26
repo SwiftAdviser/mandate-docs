@@ -1,7 +1,7 @@
 ---
 title: "Intent States"
 sidebarTitle: "Intent States"
-description: "Complete state machine reference for Mandate intents, with all 9 states, TTLs, transitions, and terminal state behavior."
+description: "Complete state machine reference for Mandate intents, with all 10 states, TTLs, transitions, and terminal state behavior."
 ---
 
 ## What is the intent state machine?
@@ -12,6 +12,7 @@ Every validated transaction in Mandate is tracked as an intent. The intent moves
 
 ```mermaid
 stateDiagram-v2
+    [*] --> preflight: validate (preflight alias)
     [*] --> allowed: validate (action)
     [*] --> reserved: validate (raw)
     reserved --> approval_pending: approval trigger fires
@@ -30,6 +31,7 @@ stateDiagram-v2
 
 | State | Description | TTL | Terminal | Entry Point |
 |-------|-------------|-----|----------|-------------|
+| `preflight` | Validated via the `/validate/preflight` alias. Lightweight validation without quota reservation. | 30 min | No | Agent calls `POST /validate/preflight` |
 | `allowed` | Validated via action-based endpoint (`POST /validate`). The transaction is approved by policy and ready to execute through the agent's wallet. | 24 hours | Yes | Agent calls validate |
 | `reserved` | Validated via raw endpoint (`POST /validate/raw`). Quota is reserved. Awaiting broadcast. | 15 min | No | Agent calls raw validate |
 | `approval_pending` | One or more approval triggers fired. Waiting for the owner to approve or reject in the dashboard, Slack, or Telegram. | 1 hour | No | System detects approval trigger |
@@ -44,6 +46,7 @@ stateDiagram-v2
 
 | From | To | Trigger | Actor |
 |------|----|---------|-------|
+| _(new)_ | `preflight` | Agent calls `POST /validate/preflight` | Agent |
 | _(new)_ | `allowed` | Agent calls `POST /validate` | Agent |
 | _(new)_ | `reserved` | Agent calls `POST /validate/raw` | Agent |
 | `reserved` | `approval_pending` | Policy engine detects an approval trigger | System |
@@ -62,6 +65,10 @@ stateDiagram-v2
 Terminal states end the intent lifecycle. No further transitions are possible.
 
 **Terminal states:** `allowed`, `confirmed`, `failed`, `expired`, `rejected`
+
+<Note>
+`allowed` is not listed in the `TERMINAL_STATUSES` constant in source (`TxIntent.php`), but it does not transition further. The agent uses the validation result to proceed with their own wallet signing.
+</Note>
 
 **Non-terminal states:** `reserved`, `approval_pending`, `approved`, `broadcasted`
 

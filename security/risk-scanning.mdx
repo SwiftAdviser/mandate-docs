@@ -40,11 +40,17 @@ If the Aegis service is temporarily unreachable (network issues, service downtim
 
 This is a deliberate design choice. Blocking all transactions because a third-party service is down would make the risk scanner a denial-of-service vector. The degraded flag ensures you can audit which transactions were not scanned during the outage.
 
+<Warning>
+When the Aegis risk scanner is unreachable (network timeout, service outage), Mandate operates in degraded mode: transactions proceed with a `risk_degraded: true` flag but are NOT blocked. Monitor the `risk_degraded` field in intent status responses and alert your operations team when it appears.
+</Warning>
+
 ## How do you enable or disable risk scanning?
 
 Risk scanning is controlled by the `risk_scan_enabled` field in the agent's policy. It is enabled by default. To disable it, set `risk_scan_enabled: false` in the policy builder or via the API.
 
 Disabling risk scanning removes the Aegis check entirely. Transactions to any address will proceed based on other policy rules alone. This is not recommended for production agents.
+
+## Next Steps
 
 <CardGroup cols={3}>
   <Card title="Threat Model" icon="shield" href="/security/threat-model">

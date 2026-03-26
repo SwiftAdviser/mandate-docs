@@ -22,7 +22,7 @@ A condition in a policy that requires human approval before the transaction can 
 
 **Block reason**
 
-A machine-readable code explaining why a transaction was blocked. Examples: `per_tx_limit_exceeded`, `address_not_allowed`, `schedule_outside_window`. See [Block Reasons](/reference/block-reasons) for the full list.
+A machine-readable code explaining why a transaction was blocked. Examples: `per_tx_limit_exceeded`, `address_not_allowed`, `outside_schedule`. See [Block Reasons](/reference/block-reasons) for the full list.
 
 ## C
 
@@ -68,7 +68,7 @@ An AI-generated policy recommendation based on transaction patterns. Insights ap
 
 **Intent**
 
-A validated transaction request tracked through its lifecycle. Created when the agent calls `/validate`. Moves through states until it reaches a terminal state (`confirmed`, `failed`, `expired`, or `rejected`).
+A validated intent tracked through its lifecycle. Created when the agent calls `/validate`. Moves through states until it reaches a terminal state (`confirmed`, `failed`, `expired`, or `rejected`).
 
 **Intent hash**
 
@@ -151,3 +151,17 @@ The first 4 bytes of EVM calldata, identifying the contract function being calle
 **Validate**
 
 The primary API call. Your agent sends an action, amount, recipient, and reason. Mandate evaluates the request against the active policy and returns one of three results: `allowed`, `blocked`, or `approval_required`.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Block Reasons" icon="ban" href="/reference/block-reasons">
+    Full reference for all block reason codes.
+  </Card>
+  <Card title="Intent States" icon="list-check" href="/reference/intent-states">
+    State machine reference for intent lifecycle.
+  </Card>
+  <Card title="Policy Fields" icon="sliders" href="/reference/policy-fields">
+    Every configurable field in an agent policy.
+  </Card>
+</CardGroup>

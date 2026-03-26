@@ -72,6 +72,29 @@ curl -X POST https://app.mandate.md/api/agents/{agentId}/circuit-break \
 - Do not modify transaction parameters after validation.
 - Avoid sending other transactions between validation and broadcast if using sequential nonces.
 
+## For AI agents
+
+If your agent handles transactions programmatically, detect and handle circuit breaker errors in code:
+
+```typescript
+import { CircuitBreakerError } from '@mandate.md/sdk';
+
+// In your agent's transaction handler:
+try {
+  const result = await client.validate({ ... });
+} catch (err) {
+  if (err instanceof CircuitBreakerError) {
+    // Stop all transaction attempts
+    // Alert the operator via your notification channel
+    // Do NOT retry: the circuit breaker requires manual reset
+    await notifyOperator('Circuit breaker tripped', err.message);
+    return { action: 'halt', reason: 'circuit_breaker_active' };
+  }
+}
+```
+
+A `CircuitBreakerError` means all transactions are blocked until the owner resets the circuit breaker from the dashboard or API. The agent should stop retrying and escalate to a human operator.
+
 ## Next Steps
 
 <CardGroup cols={3}>

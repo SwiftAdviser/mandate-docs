@@ -37,6 +37,31 @@ GET  /api/agents/{agentId}/circuit-break    # Check status
 
 Both require dashboard authentication (not runtime key auth). The agent itself cannot trip or reset its own circuit breaker.
 
+## How to handle in code
+
+```typescript
+import { MandateClient, CircuitBreakerError } from '@mandate.md/sdk';
+
+const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY! });
+
+try {
+  const result = await client.validate({
+    action: 'transfer',
+    to: '0xRecipientAddress',
+    amount: '5000000',
+    reason: 'Monthly vendor payment',
+  });
+} catch (err) {
+  if (err instanceof CircuitBreakerError) {
+    // HTTP 403: agent is emergency-stopped
+    // Do NOT retry. Alert the operator.
+    console.error('Circuit breaker active:', err.message);
+  }
+}
+```
+
+## Next Steps
+
 <CardGroup cols={3}>
   <Card title="Dashboard Controls" icon="toggle-on" href="/dashboard/circuit-breaker">
     Manage circuit breakers from the dashboard

@@ -55,15 +55,6 @@ The `validate()` method on `MandateClient` is the primary, recommended way to ch
   }
   ```
 
-  ```bash CLI
-  npx @mandate.md/cli validate \
-    --action transfer \
-    --amount 50 \
-    --to 0x036CbD53842c5426634e7929541eC2318f3dCF7e \
-    --token USDC \
-    --reason "Payment for API access - invoice #1234"
-  ```
-
   ```python Python
   import os, requests
 
@@ -87,6 +78,15 @@ The `validate()` method on `MandateClient` is the primary, recommended way to ch
       print(f"Blocked: {data['blockReason']} - {data.get('blockDetail')}")
   elif resp.status_code == 202:
       print(f"Needs approval: {data['intentId']}")
+  ```
+
+  ```bash CLI
+  npx @mandate.md/cli validate \
+    --action transfer \
+    --amount 50 \
+    --to 0x036CbD53842c5426634e7929541eC2318f3dCF7e \
+    --token USDC \
+    --reason "Payment for API access - invoice #1234"
   ```
 
   ```bash curl
@@ -158,7 +158,7 @@ try {
 }
 ```
 
-Common block reasons include `per_tx_limit_exceeded`, `daily_limit_exceeded`, `address_not_in_allowlist`, `action_blocked`, `reason_blocked`, and `schedule_outside_window`. See [Block Reasons](/reference/block-reasons) for the full list of 12 codes.
+Common block reasons include `per_tx_limit_exceeded`, `daily_quota_exceeded`, `address_not_allowed`, `action_blocked`, `reason_blocked`, and `outside_schedule`. See [Block Reasons](/reference/block-reasons) for the full list of 14 codes.
 
 ### 3. Approval required
 

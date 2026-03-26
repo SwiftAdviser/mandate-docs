@@ -130,13 +130,12 @@ When a `PolicyBlockedError` fires, the `blockReason` field tells you exactly whi
 | `daily_quota_exceeded` | Daily spend limit exhausted | Wait until the next UTC day or request increase |
 | `monthly_quota_exceeded` | Monthly spend limit exhausted | Wait until the next month or request increase |
 | `address_not_allowed` | Destination not in allowlist | Add the address in [Policy Builder](/dashboard/policy-builder) |
-| `action_not_allowed` | Action type blocked by policy | Update allowed actions in policy |
-| `selector_not_allowed` | Function selector blocked | Update allowed selectors in policy |
-| `schedule_outside_window` | Transaction outside allowed hours | Wait for the schedule window to open |
+| `action_blocked` | Action type blocked by policy | Update allowed actions in policy |
+| `selector_blocked` | Function selector blocked | Update allowed selectors in policy |
+| `outside_schedule` | Transaction outside allowed hours | Wait for the schedule window to open |
 | `circuit_breaker_active` | Emergency stop is active | Owner must [reset the circuit breaker](/dashboard/circuit-breaker) |
 | `reason_blocked` | Prompt injection detected in reason field | Review and rewrite the reason text |
-| `aegis_critical_risk` | Address flagged as critical risk | Do not transact with this address |
-| `aegis_high_risk` | Address flagged as high risk | Verify the address before proceeding |
+| `aegis_critical_risk` | Address flagged as critical risk | Do not transact with this address. HIGH risk triggers approval instead. |
 
 See [Block Reasons Reference](/reference/block-reasons) for the full list of all reason codes.
 

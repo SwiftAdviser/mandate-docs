@@ -64,7 +64,7 @@ Thrown when a transaction violates one or more policy rules: spend limits, allow
 |----------|------|-------------|
 | `message` | `string` | Human-readable description |
 | `statusCode` | `number` | Always `422` |
-| `blockReason` | `string` | Machine-readable reason (e.g. `spend_limit_exceeded`, `address_not_allowed`) |
+| `blockReason` | `string` | Machine-readable reason (e.g. `per_tx_limit_exceeded`, `address_not_allowed`) |
 | `detail` | `string \| undefined` | Additional context from the policy engine |
 | `declineMessage` | `string \| undefined` | User-facing decline message set by the policy owner |
 
@@ -166,7 +166,7 @@ Thrown when the destination address is flagged by the Aegis risk scanner.
 |----------|------|-------------|
 | `message` | `string` | Human-readable description of the risk block |
 | `statusCode` | `number` | Always `422` |
-| `blockReason` | `string` | Risk reason code (e.g. `"aegis_critical_risk"`, `"aegis_high_risk"`) |
+| `blockReason` | `string` | Risk reason code (e.g. `"aegis_critical_risk"`). HIGH risk triggers approval, not a block. |
 
 **When it fires:** Before policy evaluation, Mandate runs the destination address through its risk scanner. If the address is associated with known exploits, sanctions, or other critical risks, this error fires.
 
@@ -219,6 +219,8 @@ try {
   }
 }
 ```
+
+## Next Steps
 
 <CardGroup cols={3}>
   <Card title="Handle Errors Guide" icon="shield-check" href="/guides/handle-errors">

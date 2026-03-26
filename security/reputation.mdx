@@ -40,6 +40,32 @@ Reputation checks run during policy evaluation alongside spend limits, allowlist
 
 Reputation data is cached for 5 minutes to avoid excessive subgraph queries. The cache is per-agent, so a reputation change takes at most 5 minutes to affect transaction validation.
 
+## How to handle in code
+
+```typescript
+import { MandateClient, ApprovalRequiredError } from '@mandate.md/sdk';
+
+const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY! });
+
+try {
+  const result = await client.validate({
+    action: 'transfer',
+    to: '0xRecipientAddress',
+    amount: '5000000',
+    reason: 'Treasury rebalance',
+  });
+} catch (err) {
+  if (err instanceof ApprovalRequiredError) {
+    // approvalReason may be "unknown_agent" or "low_reputation"
+    console.log('Approval needed:', err.approvalReason);
+    console.log('Waiting for owner decision...');
+    const status = await client.waitForApproval(err.intentId);
+  }
+}
+```
+
+## Next Steps
+
 <CardGroup cols={3}>
   <Card title="Threat Model" icon="shield" href="/security/threat-model">
     Full security overview

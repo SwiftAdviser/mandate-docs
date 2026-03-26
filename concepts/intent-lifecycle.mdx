@@ -6,16 +6,17 @@ description: "How Mandate intents move through states from validation to on-chai
 
 ## What is an intent?
 
-An intent represents a validated transaction request tracked through its full lifecycle. When an agent calls the Mandate API to validate a transaction, Mandate creates an intent record and tracks it from creation through signing, broadcast, and on-chain confirmation. Each intent has a unique ID, a state, and an expiration time.
+An intent represents a validated intent tracked through its full lifecycle. When an agent calls the Mandate API to validate a transaction, Mandate creates an intent record and tracks it from creation through signing, broadcast, and on-chain confirmation. Each intent has a unique ID, a state, and an expiration time.
 
 Intents exist because blockchain transactions are not instant. Between validation and on-chain confirmation, the transaction passes through multiple stages. Mandate tracks each stage to enforce time limits, manage quota reservations, and build an audit trail.
 
 ## How does the state machine work?
 
-Intents follow a strict state machine with 8 possible states. The entry point depends on which validation endpoint the agent uses: action-based validation creates an `allowed` intent, while raw validation creates a `reserved` intent. From there, the intent progresses through approval (if required), broadcast, and confirmation.
+Intents follow a strict state machine with 10 possible states. The entry point depends on which validation endpoint the agent uses: preflight validation creates a `preflight` intent, action-based validation creates an `allowed` intent, while raw validation creates a `reserved` intent. From there, the intent progresses through approval (if required), broadcast, and confirmation.
 
 ```mermaid
 stateDiagram-v2
+    [*] --> preflight: validate (preflight alias)
     [*] --> reserved: validate (raw)
     [*] --> allowed: validate (action)
     reserved --> approval_pending: needs approval
@@ -36,6 +37,7 @@ The state machine is implemented in `IntentStateMachineService`. Every transitio
 
 | State | Description | TTL | Terminal |
 |-------|-------------|-----|----------|
+| `preflight` | Validated via `/validate/preflight` alias, lightweight check without quota reservation | 30 min | No |
 | `allowed` | Validated via action-based endpoint, ready to execute | 24 hours | Yes |
 | `reserved` | Validated via raw endpoint, awaiting broadcast | 15 min | No |
 | `approval_pending` | Waiting for human decision in the dashboard | 1 hour | No |
@@ -54,7 +56,7 @@ Five actors drive intent transitions. The agent initiates validation and reports
 
 | Transition | Trigger | Actor |
 |------------|---------|-------|
-| `[new]` to `reserved` or `allowed` | Agent calls validate endpoint | Agent |
+| `[new]` to `preflight`, `reserved`, or `allowed` | Agent calls validate endpoint | Agent |
 | `reserved` to `approval_pending` | Policy engine detects approval trigger | System |
 | `approval_pending` to `approved` | Owner clicks approve in dashboard or Slack/Telegram | Owner |
 | `approval_pending` to `rejected` | Owner clicks reject | Owner |

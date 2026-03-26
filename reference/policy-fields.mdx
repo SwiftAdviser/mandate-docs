@@ -54,6 +54,7 @@ Set `allowed_addresses` to restrict where funds can go. This is the strongest pr
 |-------|------|---------|-------------|
 | `max_gas_limit` | `string` | `null` | Maximum gas limit (hex string). Raw validation only. When `null`, no gas cap is enforced. Example: `"0x1e8480"` (2,000,000 gas). Exceeding triggers `gas_limit_exceeded`. |
 | `max_value_wei` | `string` | `null` | Maximum native value in wei (hex string). Raw validation only. When `null`, no native value cap is enforced. Exceeding triggers `value_wei_exceeded`. |
+| `max_slippage_bps` | `integer` | `null` | Maximum allowed slippage in basis points. When `null`, no slippage cap is enforced. Example: `50` = 0.5% max slippage. |
 
 ### Schedule
 

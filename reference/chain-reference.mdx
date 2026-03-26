@@ -6,7 +6,9 @@ description: "Supported chains, chain IDs, USDC contract addresses, and runtime 
 
 ## Supported chains
 
-Mandate supports 4 EVM chains: 2 mainnets and 2 testnets. Your runtime key prefix determines which chains you can use.
+Mandate supports 10 chains across 3 ecosystems: EVM, Solana, and TON. Your runtime key prefix determines which environment (mainnet vs testnet) you can use.
+
+### EVM chains
 
 | Chain | Chain ID | USDC Address | Decimals | Key Prefix |
 |-------|----------|-------------|----------|------------|
@@ -14,19 +16,39 @@ Mandate supports 4 EVM chains: 2 mainnets and 2 testnets. Your runtime key prefi
 | Ethereum Sepolia | `11155111` | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` | 6 | `mndt_test_*` |
 | Base Mainnet | `8453` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | 6 | `mndt_live_*` |
 | Base Sepolia | `84532` | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | 6 | `mndt_test_*` |
+| BNB Chain | `56` | `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d` | 18 | `mndt_live_*` |
+| BNB Testnet | `97` | BNB testnet USDC | 18 | `mndt_test_*` |
+
+### Solana chains
+
+| Chain | Chain ID | USDC Address | Decimals | Key Prefix |
+|-------|----------|-------------|----------|------------|
+| Solana | `solana` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | 6 | `mndt_live_*` |
+| Solana Devnet | `solana-devnet` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | 6 | `mndt_test_*` |
+
+### TON chains
+
+| Chain | Chain ID | USDT Address | Decimals | Key Prefix |
+|-------|----------|-------------|----------|------------|
+| TON | `ton` | `EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs` | 6 | `mndt_live_*` |
+| TON Testnet | `ton-testnet` | TON testnet USDT | 6 | `mndt_test_*` |
+
+<Note>
+Non-EVM chains use string-based chain IDs (`"solana"`, `"ton"`) instead of numeric IDs. Address formats and comparison rules differ per ecosystem: EVM addresses are case-insensitive, Solana and TON addresses are case-sensitive.
+</Note>
 
 ## Test vs live keys
 
 Runtime keys use prefixes to enforce environment separation:
 
-- **`mndt_test_*`** keys work with testnet chains (Sepolia, Base Sepolia). Use these for development and testing. Testnet usage is free.
-- **`mndt_live_*`** keys work with mainnet chains (Ethereum, Base). Use these for production deployments.
+- **`mndt_test_*`** keys work with testnet chains (Sepolia, Base Sepolia, BNB Testnet, Solana Devnet, TON Testnet). Use these for development and testing. Testnet usage is free.
+- **`mndt_live_*`** keys work with mainnet chains (Ethereum, Base, BNB, Solana, TON). Use these for production deployments.
 
 A test key cannot validate transactions on mainnet. A live key cannot validate transactions on testnet. This prevents accidental production transactions during development.
 
 ## SDK constants
 
-The SDK exports chain and token constants so you avoid hardcoding addresses:
+The TypeScript SDK exports constants for EVM chains. Non-EVM chains (Solana, TON) require passing string chain IDs directly.
 
 ```typescript
 import { CHAIN_ID, USDC } from '@mandate.md/sdk';
@@ -77,5 +99,8 @@ No real funds are at risk. Testnet validation behaves identically to mainnet, in
   </Card>
   <Card title="Credential Management" icon="key" href="/security/credential-management">
     Store and rotate runtime keys securely.
+  </Card>
+  <Card title="Register Agent" icon="user-plus" href="/guides/register-agent">
+    Set up your agent with the right chain and key prefix.
   </Card>
 </CardGroup>

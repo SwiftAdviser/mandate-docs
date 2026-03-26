@@ -6,7 +6,7 @@ description: "How the keccak256 intent hash binds validated transaction paramete
 
 ## What is the intent hash?
 
-The intent hash is a keccak256 hash of canonical transaction parameters that ensures the Mandate server and the agent agree on exactly what transaction was validated. When the agent calls raw validation, both sides compute the same hash from the same inputs. If the hashes do not match, the transaction is blocked with `intent_hash_mismatch`. This mechanism is used only in raw validation flows. Action-based validation does not require an intent hash.
+The intent hash is a keccak256 hash of canonical transaction parameters that ensures the Mandate server and the agent agree on exactly what was validated. Both sides compute the hash from the same inputs; a mismatch blocks the transaction with `intent_hash_mismatch`. This mechanism applies only to raw validation flows. Action-based validation does not require an intent hash.
 
 The intent hash exists to prevent a specific attack: the envelope swap. Without it, an attacker could intercept the validation response and use the approval to broadcast a different transaction. The hash creates a cryptographic binding between what was validated and what gets signed.
 

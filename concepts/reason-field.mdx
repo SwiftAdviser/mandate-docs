@@ -6,7 +6,7 @@ description: "Why every Mandate validation requires a reason string, how it dete
 
 ## What is the reason field?
 
-The reason field is a required string in every validation call that explains why the agent wants to transact. It is a free-text description (max 1,000 characters) of the agent's intent, written by the agent at the moment it decides to make a transaction. Mandate uses this field for three purposes: building an audit trail, detecting prompt injection, and training policy intelligence.
+The reason field is a required string in every validation call that explains why the agent wants to transact. It is a free-text description (max 1,000 characters) of the agent's intent, written at the moment the agent decides to transact. Mandate uses it for three purposes: audit trails, prompt injection detection, and policy intelligence.
 
 The reason field is Mandate's core differentiator from session keys and other delegation mechanisms. Session keys check signatures and spend limits but never ask why. Mandate checks everything session keys check, plus the agent's stated motivation. This matters because the most dangerous attacks look legitimate on every metric except intent.
 

@@ -63,8 +63,8 @@ Actions use ElizaOS callbacks to report errors. The handler returns `false` on p
 
 ```typescript
 // Policy block callback:
-// text: "Transfer blocked by Mandate policy: daily_limit_exceeded"
-// content: { blocked: true, reason: "daily_limit_exceeded" }
+// text: "Transfer blocked by Mandate policy: daily_quota_exceeded"
+// content: { blocked: true, reason: "daily_quota_exceeded" }
 
 // Approval required callback:
 // text: "Transfer requires approval. IntentId: int_abc123. ApprovalId: apr_xyz789"

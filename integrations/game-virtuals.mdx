@@ -82,7 +82,7 @@ The GAME SDK uses a status-based return model. Functions return a `FunctionResul
 | Status | Mandate meaning |
 |--------|-----------------|
 | `done` | Transaction validated and sent. Result contains `txHash` and `intentId`. |
-| `failed` | Blocked by policy. Feedback contains the block reason (e.g., `"Blocked by policy: daily_limit_exceeded"`). |
+| `failed` | Blocked by policy. Feedback contains the block reason (e.g., `"Blocked by policy: daily_quota_exceeded"`). |
 | `pending` | Approval required. Feedback contains the `intentId` for polling. |
 
 TypeScript example:

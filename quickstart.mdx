@@ -133,7 +133,7 @@ Store the `runtimeKey` in your `.env` file (`MANDATE_RUNTIME_KEY=mndt_test_...`)
 You can test the policy engine without a private key or wallet. This is the fastest way to verify your setup works.
 
 ```typescript
-// validate-test.ts — Run: bun run validate-test.ts
+// validate-test.ts - Run: bun run validate-test.ts
 import { MandateClient, PolicyBlockedError, ApprovalRequiredError } from '@mandate.md/sdk';
 
 const client = new MandateClient({
@@ -203,7 +203,7 @@ Expected output:
 
 <Accordion title="Complete runnable example (register + validate + transfer)">
 ```typescript
-// quickstart.ts — Run: bun run quickstart.ts
+// quickstart.ts - Run: bun run quickstart.ts
 // Prerequisites: bun add @mandate.md/sdk viem
 // Set MANDATE_RUNTIME_KEY and AGENT_PRIVATE_KEY in .env
 

@@ -135,7 +135,7 @@ interface ValidateResult {
 | `requiresApproval` | `boolean` | Whether human approval is needed before proceeding |
 | `approvalId` | `string \| null` | Approval request ID for polling |
 | `approvalReason` | `string \| null` | Human-readable reason for requiring approval |
-| `blockReason` | `string \| null` | Machine-readable block reason (e.g. `spend_limit_exceeded`) |
+| `blockReason` | `string \| null` | Machine-readable block reason (e.g. `per_tx_limit_exceeded`) |
 | `blockDetail` | `string \| null` | Additional context from the policy engine |
 
 ---
@@ -285,6 +285,8 @@ interface TransferResult {
 | `txHash` | `Hash` | On-chain transaction hash (viem `Hash` type, which is `` `0x${string}` ``) |
 | `intentId` | `string` | Mandate intent ID for audit trail and status polling |
 | `status` | `IntentStatus` | Final intent status after broadcast and optional confirmation wait |
+
+## Next Steps
 
 <CardGroup cols={3}>
   <Card title="MandateClient" icon="code" href="/sdk/mandate-client">

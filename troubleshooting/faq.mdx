@@ -1,7 +1,7 @@
 ---
 title: "Frequently Asked Questions"
 sidebarTitle: "FAQ"
-description: "Answers to the 20 most common questions about Mandate: chain support, testing, key management, approvals, and integration patterns."
+description: "Answers to the 21 most common questions about Mandate: chain support, testing, key management, approvals, and integration patterns."
 ---
 
 ## General
@@ -62,7 +62,7 @@ Yes, through raw validation. Raw validation accepts any calldata, so you can val
 
 ### 9. What chains are supported?
 
-Four chains: Ethereum Mainnet (1), Ethereum Sepolia (11155111), Base Mainnet (8453), and Base Sepolia (84532). Test keys (`mndt_test_*`) work with testnets. Live keys (`mndt_live_*`) work with mainnets.
+Ten chains across 3 ecosystems: Ethereum (1, 11155111), Base (8453, 84532), BNB (56, 97), Solana (solana, solana-devnet), and TON (ton, ton-testnet). Test keys (`mndt_test_*`) work with testnets. Live keys (`mndt_live_*`) work with mainnets. The TypeScript SDK exports constants for the 4 EVM chains; non-EVM chains use string-based IDs.
 
 See [Chain Reference](/reference/chain-reference) for USDC addresses and SDK constants.
 

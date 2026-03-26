@@ -6,7 +6,7 @@ description: "The 14-check validation pipeline that evaluates every agent transa
 
 ## What is the policy engine?
 
-The Mandate policy engine evaluates every agent transaction against 14 sequential checks. These checks cover circuit breaker status, schedule windows, address allowlists, blocked actions, per-transaction limits, daily and monthly quotas, risk screening, reputation scoring, reason scanning, and approval thresholds. If any check fails, the transaction is blocked with a specific `blockReason` code. If all checks pass but an approval trigger fires, the transaction pauses for human review.
+The Mandate policy engine evaluates every agent transaction against 14 sequential checks covering circuit breaker status, schedule windows, allowlists, spend limits, risk screening, reputation scoring, reason scanning, and approval thresholds. If any check fails, the transaction is blocked with a specific `blockReason` code. If all checks pass but an approval trigger fires, the transaction pauses for human review.
 
 The engine runs in `PolicyEngineService`, which orchestrates 6 other services: `CircuitBreakerService`, `QuotaManagerService`, `AegisService`, `ReputationService`, `ReasonScannerService`, and `CalldataDecoderService`. The entire pipeline executes in a single API call and returns a deterministic result.
 

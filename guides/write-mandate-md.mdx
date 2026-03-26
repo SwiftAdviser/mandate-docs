@@ -158,10 +158,10 @@ When both MANDATE.md and dashboard policy settings exist for the same agent, the
 
 When an agent attempts a transaction that breaks a MANDATE.md rule, the policy engine returns a specific [block reason](/reference/block-reasons). For example:
 
-- Exceeding per-transaction limit returns `spend_limit_exceeded`
+- Exceeding per-transaction limit returns `per_tx_limit_exceeded`
 - Sending to an address not in the allowlist returns `address_not_allowed`
 - Calling a blocked action returns `action_blocked`
-- Transacting outside schedule returns `schedule_outside_window`
+- Transacting outside schedule returns `outside_schedule`
 
 The agent receives the block reason in the API response and can communicate it to the user or log it for debugging.
 

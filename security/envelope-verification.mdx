@@ -57,6 +57,38 @@ No. Envelope verification only applies to the **raw validation** flow (`rawValid
 
 The **action-based validation** flow (`validate()` with `action` + `reason`) does not include broadcast tracking. In this flow, the agent or its wallet provider handles execution independently, and Mandate does not verify on-chain results.
 
+## Implementation example
+
+```typescript
+import { MandateClient } from '@mandate.md/sdk';
+
+const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY! });
+
+// Step 1: Validate the raw transaction
+const result = await client.rawValidate({
+  chainId: 84532,
+  nonce: 42,
+  to: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  calldata: '0xa9059cbb...',
+  valueWei: '0',
+  gasLimit: '65000',
+  maxFeePerGas: '1000000000',
+  maxPriorityFeePerGas: '100000000',
+  intentHash: '0x...', // Must match server-side computation
+  reason: 'Pay invoice #127',
+});
+
+// Step 2: Sign and broadcast the transaction yourself
+
+// Step 3: Report the txHash for envelope verification
+await client.postEvent(result.intentId!, '0xYourTxHash...');
+
+// The server compares: from, to, nonce, calldata, value
+// Mismatch triggers circuit breaker auto-trip
+```
+
+## Next Steps
+
 <CardGroup cols={3}>
   <Card title="Circuit Breaker" icon="circle-stop" href="/security/circuit-breaker">
     What happens when verification fails

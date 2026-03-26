@@ -36,15 +36,6 @@ Use the SDK, CLI, or raw HTTP. All three methods hit the same `POST /api/agents/
   console.log('Claim URL:', claimUrl);      // Share with wallet owner
   ```
 
-  ```bash CLI
-  npx @mandate.md/cli login \
-    --name "my-trading-agent" \
-    --address 0xYourAgentWalletAddress \
-    --chainId 84532 \
-    --perTxLimit 100 \
-    --dailyLimit 1000
-  ```
-
   ```python Python
   import requests
 
@@ -61,6 +52,15 @@ Use the SDK, CLI, or raw HTTP. All three methods hit the same `POST /api/agents/
   print("Agent ID:", data["agentId"])
   print("Runtime key:", data["runtimeKey"])  # Save securely
   print("Claim URL:", data["claimUrl"])      # Share with wallet owner
+  ```
+
+  ```bash CLI
+  npx @mandate.md/cli login \
+    --name "my-trading-agent" \
+    --address 0xYourAgentWalletAddress \
+    --chainId 84532 \
+    --perTxLimit 100 \
+    --dailyLimit 1000
   ```
 
   ```bash curl

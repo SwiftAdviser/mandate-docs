@@ -32,6 +32,17 @@ const actions = mandateActionProvider();
 
 Pass `walletProvider` and `actions` to your AgentKit agent configuration. The wallet provider wraps `MandateWallet` from the SDK, so every `sendTransaction()` call goes through Mandate validation first.
 
+```typescript
+try {
+  // Use the agent with Mandate tools
+  const result = await agent.execute('Transfer 5 USDC to 0xRecipient');
+} catch (err) {
+  if (err.message.includes('daily_quota_exceeded')) {
+    console.log('Daily limit reached, will retry tomorrow');
+  }
+}
+```
+
 ## Actions
 
 | Action | Description |
@@ -58,7 +69,7 @@ Action methods return descriptive strings instead of throwing. This lets the LLM
 
 ```typescript
 // Policy block:
-// "Transfer blocked by Mandate policy: daily_limit_exceeded"
+// "Transfer blocked by Mandate policy: daily_quota_exceeded"
 
 // Approval required:
 // "Transfer queued for approval. IntentId: int_abc123. ApprovalId: apr_xyz789"
