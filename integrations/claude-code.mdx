@@ -4,6 +4,8 @@ sidebarTitle: "Claude Code"
 description: "Install the Mandate Claude Code plugin for two-phase transaction enforcement: automatic blocking of unvalidated wallet calls with zero code changes."
 ---
 
+**GitHub:** [SwiftAdviser/claude-mandate-plugin](https://github.com/SwiftAdviser/claude-mandate-plugin)
+
 ## What is it?
 
 The Mandate Claude Code plugin (`claude-mandate-plugin`) enforces spend limits on every transaction Claude executes. It uses a two-phase approach: PostToolUse records validation tokens when the agent validates with Mandate, and PreToolUse blocks transaction commands that lack a valid token. Fail-closed, no network calls in the gate.

@@ -33,8 +33,8 @@
 
   "navbar": {
     "links": [
-      { "type": "github", "href": "https://github.com/AIMandateProject/mandate" },
-      { "label": "Blog", "href": "https://mandate.md/blog" }
+      { "type": "github", "href": "https://github.com/SwiftAdviser/mandate-skill" },
+      { "label": "Community", "href": "https://t.me/mandate_md_chat" }
     ],
     "primary": {
       "type": "button",
@@ -46,7 +46,8 @@
   "footer": {
     "socials": {
       "x": "https://x.com/mandate_md",
-      "github": "https://github.com/AIMandateProject"
+      "github": "https://github.com/SwiftAdviser/mandate-skill",
+      "telegram": "https://t.me/mandate_md_chat"
     }
   },
 

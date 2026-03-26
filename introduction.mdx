@@ -22,13 +22,13 @@ Mandate is non-custodial. Your private key never leaves your machine. Mandate va
 
 <CardGroup cols={3}>
   <Card title="Intent-aware decisions" icon="brain">
-    The `reason` field captures what session keys miss. Your agent states its purpose for every transaction. The policy engine scans for manipulation, anomalies, and policy violations before the wallet is called.
+    The `reason` field captures what session keys miss. Your agent states its purpose, and the policy engine scans for manipulation before the wallet is called.
   </Card>
   <Card title="Risk prevention" icon="shield-halved">
-    14 validation checks run on every transaction: circuit breaker status, schedule windows, address allowlists, blocked actions, per-transaction limits, daily and monthly quotas, risk screening, reputation scoring, reason scanning, and approval thresholds. A circuit breaker can halt all agent activity instantly.
+    14 validation checks on every transaction: spend limits, allowlists, schedule windows, risk screening, prompt injection detection. A circuit breaker can halt all activity instantly.
   </Card>
   <Card title="Immutable audit log" icon="scroll">
-    Every transaction is logged with its stated purpose, validation result, policy evaluation trace, and on-chain confirmation. You get a complete record of what your agent did, why it did it, and whether it was approved.
+    Every transaction is logged with its stated purpose, validation result, and on-chain confirmation. Full record of what your agent did and why.
   </Card>
 </CardGroup>
 
@@ -83,6 +83,14 @@ Session keys protect against overspending. They do not protect against an agent 
 4. Mandate's envelope verifier confirms the on-chain transaction matches the validated intent. Any mismatch trips the circuit breaker.
 
 The full flow, including approval workflows and state transitions, is covered in [How It Works](/how-it-works).
+
+## Developer Community
+
+Join the conversation, ask questions, and share what you're building:
+
+<Card title="Telegram: @mandate_md_chat" icon="telegram" href="https://t.me/mandate_md_chat">
+  Developer community for Mandate. Get help, share feedback, and connect with other builders.
+</Card>
 
 ## Next Steps
 
