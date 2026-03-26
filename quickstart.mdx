@@ -27,24 +27,31 @@ Pick the path that matches how you build:
 
 ## Claude Code Plugin
 
-The fastest path. One command, zero code changes. The plugin intercepts all wallet transactions Claude executes and validates them against your policy.
+The fastest path. Two commands, zero code changes. The plugin intercepts all wallet transactions Claude executes and validates them against your policy.
+
+**Step 1:** Add the marketplace and install the plugin:
 
 ```bash
-claude plugin install claude-mandate-plugin
+/plugin marketplace add SwiftAdviser/claude-mandate-plugin
+/plugin install mandate@mandate
 ```
 
-Then register your agent:
+**Step 2:** Register your agent:
 
 ```bash
 npx @mandate.md/cli login --name "my-claude-agent"
 ```
 
-That's it. The plugin auto-gates every Bash transaction command and MCP payment tool. If Claude tries to send tokens without validating first, the plugin blocks it.
+Claim at the printed URL, then set policies at [app.mandate.md](https://app.mandate.md).
 
-**What you get:**
-- Two-phase enforcement (PreToolUse gate + PostToolUse token recording)
-- Auto-scan on startup (finds unprotected wallet calls in your codebase)
-- Works with any wallet: Bankr, Locus, Sponge, direct RPC, MCP tools
+The plugin gates every financial tool call. No valid Mandate token, no transaction.
+
+- Agent calls `mandate validate` with action + reason
+- If allowed: plugin records a 15-minute token, transaction proceeds
+- If blocked: agent gets counter-evidence explaining why, stops voluntarily
+- If no validation attempted: plugin blocks the tool call entirely
+- Auto-scan on startup finds unprotected wallet calls in your project
+- Works with any wallet: Bankr, MCP payment tools, direct RPC, custom CLIs
 
 **GitHub:** [SwiftAdviser/claude-mandate-plugin](https://github.com/SwiftAdviser/claude-mandate-plugin)
 

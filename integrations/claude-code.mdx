@@ -14,8 +14,11 @@ The plugin does not manage wallets. It gates the execution of transaction comman
 
 ## Install
 
+Two steps: add the marketplace, then install the plugin.
+
 ```bash
-claude plugin install claude-mandate-plugin
+/plugin marketplace add SwiftAdviser/claude-mandate-plugin
+/plugin install mandate@mandate
 ```
 
 The plugin activates immediately. No configuration files, no environment variables.
@@ -87,8 +90,10 @@ If Mandate SDK is a dependency in `package.json` or the plugin is installed, all
 Register your agent with the CLI. This creates an agent identity and stores credentials locally.
 
 ```bash
-npx @mandate/cli login --name "claude-agent" --address 0xYourWalletAddress
+npx @mandate.md/cli login --name "claude-agent"
 ```
+
+Claim at the printed URL, then set policies at [app.mandate.md](https://app.mandate.md).
 
 Credentials are saved to `~/.mandate/credentials.json` (chmod 600). The CLI reads the runtime key from this file automatically on subsequent calls.
 
