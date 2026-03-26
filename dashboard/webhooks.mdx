@@ -1,0 +1,113 @@
+---
+title: "Webhooks"
+sidebarTitle: "Webhooks"
+description: "Configure webhook endpoints with HMAC-SHA256 verification, retry policies, and structured JSON payloads for Mandate agent events."
+---
+
+## What are Mandate webhooks?
+
+Webhooks deliver real-time event notifications to your server via HTTP POST requests. When an agent event occurs (approval needed, transaction confirmed, circuit breaker tripped), Mandate sends a JSON payload to your configured endpoint. Use webhooks to build custom dashboards, trigger automated workflows, or feed data into monitoring systems.
+
+## Webhook API
+
+Manage webhooks per agent through the API:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/agents/{agentId}/webhooks` | GET | List configured webhooks for the agent. |
+| `/api/agents/{agentId}/webhooks` | PUT | Create or update webhook configuration. |
+| `/api/agents/{agentId}/webhooks/test` | POST | Send a test payload to verify the endpoint. |
+
+## Webhook types
+
+Three webhook types are available:
+
+| Type | Configuration |
+|------|---------------|
+| **slack** | `url`: Slack incoming webhook URL. |
+| **telegram** | `bot_token`: Telegram bot token. `chat_id`: target chat ID. |
+| **custom** | `url`: your endpoint URL. `secret`: shared secret for HMAC verification. |
+
+Configure webhook types on the [Notifications](/dashboard/notifications) page or via the PUT endpoint.
+
+## Payload format
+
+Every webhook delivery sends a JSON body:
+
+```json
+{
+  "event_type": "approval_pending",
+  "agent_id": "ag_abc123",
+  "intent_id": "int_xyz789",
+  "status": "approval_pending",
+  "metadata": {
+    "action": "transfer",
+    "amount_usd": "150.00",
+    "to": "0xRecipientAddress",
+    "reason": "Monthly subscription payment",
+    "risk_level": "MEDIUM"
+  },
+  "timestamp": "2026-03-26T14:30:00Z"
+}
+```
+
+The `event_type` field matches one of: `approval_pending`, `intent_confirmed`, `intent_failed`, `circuit_breaker_tripped`. The `metadata` object varies by event type but always includes the relevant transaction or agent details.
+
+## Secret verification
+
+For custom webhooks, Mandate signs every payload using HMAC-SHA256 with your configured secret. The signature is included in the `X-Mandate-Signature` header.
+
+Verify incoming webhooks on your server:
+
+```typescript TypeScript
+import { createHmac } from 'crypto';
+
+function verifySignature(payload: string, signature: string, secret: string): boolean {
+  const expected = createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+  return expected === signature;
+}
+
+// In your webhook handler:
+const isValid = verifySignature(rawBody, req.headers['x-mandate-signature'], YOUR_SECRET);
+```
+
+<Warning>
+Always verify the `X-Mandate-Signature` header before processing webhook payloads. Without verification, an attacker could send forged events to your endpoint.
+</Warning>
+
+## Retry policy
+
+If your endpoint returns a non-2xx status code or times out, Mandate retries the delivery:
+
+| Attempt | Delay |
+|---------|-------|
+| 1st retry | ~1 minute |
+| 2nd retry | ~5 minutes |
+| 3rd retry | ~30 minutes |
+
+After 3 failed attempts, the delivery is marked as failed. Check the webhook delivery log in the dashboard to see failed attempts and their response codes.
+
+## Testing
+
+Use the test endpoint to verify your configuration:
+
+```bash curl
+curl -X POST https://app.mandate.md/api/agents/{agentId}/webhooks/test \
+  -H "Authorization: Bearer mndt_test_abc123" \
+  -H "Content-Type: application/json"
+```
+
+This sends a sample payload with `event_type: "test"` to your configured endpoint. Verify that your server receives the request, validates the signature, and returns a 200 response.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Notifications" icon="bell" href="/dashboard/notifications">
+    Configure which events trigger webhook deliveries.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/overview">
+    Full API documentation for all Mandate endpoints.
+  </Card>
+</CardGroup>

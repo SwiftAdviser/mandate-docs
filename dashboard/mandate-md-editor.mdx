@@ -1,0 +1,100 @@
+---
+title: "MANDATE.md Editor"
+sidebarTitle: "MANDATE.md Editor"
+description: "Write natural-language guard rules in the dashboard MANDATE.md editor to configure agent policies with a live preview."
+---
+
+## What is the MANDATE.md editor?
+
+The MANDATE.md editor lets you write natural-language rules that configure your agent's policy. Instead of filling out individual form fields in the [policy builder](/dashboard/policy-builder), you describe what the agent should and should not do in plain text. Mandate parses your rules into structured policy fields automatically.
+
+## How it works
+
+1. Select an agent from the dropdown.
+2. Write your rules in the editor (max 10,000 characters).
+3. The preview panel on the right shows which policy fields your rules produce.
+4. Click **Save** to apply the parsed policy to the agent.
+
+The parser extracts spend limits, allowed addresses, blocked actions, approval thresholds, and schedule restrictions from your text. The preview updates in real time so you can verify the interpretation before saving.
+
+<Tip>
+Write specific, quantitative rules. "Limit daily spending to $50" produces a clear policy field. "Be careful with spending" does not.
+</Tip>
+
+## Writing effective rules
+
+Use direct statements with concrete values. Each rule should map to one or two policy fields. Keep rules on separate lines for clarity.
+
+### DeFi trader agent
+
+```
+Allow transactions only to the USDC and USDT contracts.
+Set per-transaction limit to $500.
+Set daily limit to $2,000.
+Block approve actions.
+Require approval for any swap above $200.
+Restrict operation to weekdays, 9 AM to 5 PM UTC.
+```
+
+### Payroll bot
+
+```
+Allow transfers only to these addresses:
+  0x1234...abcd
+  0x5678...efgh
+Set monthly limit to $10,000.
+Set per-transaction limit to $1,000.
+Block swap and approve actions.
+```
+
+### Shopping agent
+
+```
+Set per-transaction limit to $50.
+Set daily limit to $200.
+Require approval for any transaction above $25.
+Block approve actions.
+```
+
+## Preview panel
+
+The preview panel renders a structured view of the resulting policy:
+
+- **Spend limits**: per-tx, daily, monthly values in USD
+- **Allowed addresses**: list of permitted destinations
+- **Allowed contracts**: list of permitted contract addresses
+- **Blocked actions**: actions the agent cannot perform
+- **Approval rules**: conditions that route to the approval queue
+- **Schedule**: permitted days and hours
+
+If a rule cannot be parsed, the preview highlights it in amber with an explanation. Adjust your wording until all rules resolve cleanly.
+
+## Guard rules vs. policy builder
+
+The MANDATE.md editor and the policy builder control the same underlying policy. Changes in one reflect in the other. The difference is the interface:
+
+| MANDATE.md Editor | Policy Builder |
+|-------------------|----------------|
+| Natural language input | Form fields and dropdowns |
+| Best for writing rules from scratch | Best for tweaking individual values |
+| Preview shows parsed output | Direct field editing |
+
+You can use both interchangeably. Edit guard rules in the MANDATE.md editor, then fine-tune specific values in the policy builder.
+
+## Character limit
+
+The guard rules field accepts up to 10,000 characters. This is sufficient for comprehensive policies. If you approach the limit, consolidate redundant rules and remove commentary.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Write MANDATE.md (Guide)" icon="book-open" href="/guides/write-mandate-md">
+    Detailed guide with patterns and examples for writing guard rules.
+  </Card>
+  <Card title="Policy Builder" icon="shield-check" href="/dashboard/policy-builder">
+    Use the structured form editor alongside your guard rules.
+  </Card>
+  <Card title="Policy Fields Reference" icon="list" href="/reference/policy-fields">
+    Complete reference for every policy field produced by the parser.
+  </Card>
+</CardGroup>

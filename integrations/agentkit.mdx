@@ -1,0 +1,94 @@
+---
+title: "Coinbase AgentKit Provider"
+sidebarTitle: "AgentKit"
+description: "Integrate Mandate policy enforcement into Coinbase AgentKit with a WalletProvider and ActionProvider."
+---
+
+## What is the AgentKit provider?
+
+The `@mandate.md/agentkit-provider` package gives you two classes for Coinbase AgentKit: `MandateWalletProvider` (handles wallet operations with policy checks) and `MandateActionProvider` (exposes Mandate tools as AgentKit actions). Every transaction validates against your Mandate policies before signing.
+
+## Installation
+
+```bash
+bun add @mandate.md/agentkit-provider @coinbase/agentkit
+```
+
+`@coinbase/agentkit` is a peer dependency (>=0.1.0).
+
+## Usage
+
+```typescript
+import { MandateWalletProvider, mandateActionProvider } from '@mandate.md/agentkit-provider';
+
+const walletProvider = new MandateWalletProvider({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  privateKey: process.env.PRIVATE_KEY! as `0x${string}`,
+  chainId: 84532,
+});
+
+const actions = mandateActionProvider();
+```
+
+Pass `walletProvider` and `actions` to your AgentKit agent configuration. The wallet provider wraps `MandateWallet` from the SDK, so every `sendTransaction()` call goes through Mandate validation first.
+
+## Actions
+
+| Action | Description |
+|--------|-------------|
+| `mandate_transfer` | Transfer ERC20 tokens. Accepts `to`, `amount`, `tokenAddress`, `waitForConfirmation`. |
+| `mandate_x402_pay` | Pay for an x402-gated resource. Accepts `url` and optional `headers`. |
+| `mandate_get_policy` | Get info about the current spending policy. |
+| `mandate_get_quota` | Get remaining daily/monthly spend quota. |
+
+The action provider uses Zod schemas for input validation. Invalid parameters fail fast before reaching the Mandate API.
+
+## WalletProvider methods
+
+| Method | Description |
+|--------|-------------|
+| `getAddress()` | Returns the wallet's EVM address. |
+| `getNetwork()` | Returns `{ networkId, chainId, protocolFamily: 'evm' }`. |
+| `sendTransaction(tx)` | Validates with Mandate, signs locally, broadcasts. Returns `txHash`. |
+| `getMandateWallet()` | Returns the underlying `MandateWallet` instance for direct access. |
+
+## Error handling
+
+Action methods return descriptive strings instead of throwing. This lets the LLM read the error and decide what to do next.
+
+```typescript
+// Policy block:
+// "Transfer blocked by Mandate policy: daily_limit_exceeded"
+
+// Approval required:
+// "Transfer queued for approval. IntentId: int_abc123. ApprovalId: apr_xyz789"
+```
+
+The approval response includes `intentId` and `approvalId`. Your agent can poll for approval status using these identifiers, or direct the user to the [dashboard](/dashboard/approvals) to approve.
+
+<Warning>
+  The `signMessage()` method is not implemented. Use `sendTransaction()` or the action tools for policy-enforced operations.
+</Warning>
+
+## Configuration
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `runtimeKey` | `string` | Yes | Mandate runtime key (`mndt_live_...` or `mndt_test_...`) |
+| `privateKey` | `` `0x${string}` `` | Yes | Agent wallet private key (hex, with `0x` prefix) |
+| `chainId` | `number` | Yes | EVM chain ID (e.g., `84532` for Base Sepolia) |
+| `rpcUrl` | `string` | No | RPC endpoint URL |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Integrations Overview" icon="grid-2" href="/integrations/overview">
+    Compare all supported agent frameworks side by side.
+  </Card>
+  <Card title="Handle Approvals" icon="check-double" href="/guides/handle-approvals">
+    Build approval workflows when transactions exceed thresholds.
+  </Card>
+  <Card title="Handle Errors" icon="triangle-exclamation" href="/guides/handle-errors">
+    Catch and respond to every Mandate error type in your agent.
+  </Card>
+</CardGroup>

@@ -1,0 +1,102 @@
+---
+title: "Policy Engine"
+sidebarTitle: "Policy Engine"
+description: "The 14-check validation pipeline that evaluates every agent transaction against configured policy rules, spend limits, and approval triggers."
+---
+
+## What is the policy engine?
+
+The Mandate policy engine evaluates every agent transaction against 14 sequential checks. These checks cover circuit breaker status, schedule windows, address allowlists, blocked actions, per-transaction limits, daily and monthly quotas, risk screening, reputation scoring, reason scanning, and approval thresholds. If any check fails, the transaction is blocked with a specific `blockReason` code. If all checks pass but an approval trigger fires, the transaction pauses for human review.
+
+The engine runs in `PolicyEngineService`, which orchestrates 6 other services: `CircuitBreakerService`, `QuotaManagerService`, `AegisService`, `ReputationService`, `ReasonScannerService`, and `CalldataDecoderService`. The entire pipeline executes in a single API call and returns a deterministic result.
+
+## What are the 14 checks?
+
+The checks run in strict order. The first failure wins: later checks are skipped. This means a circuit-broken agent never reaches the spend limit check, and an agent outside schedule hours never hits the quota check.
+
+| # | Check | Block Reason | What it does |
+|---|-------|-------------|--------------|
+| 1 | Circuit breaker | `circuit_breaker_active` | Checks if the agent is emergency-stopped |
+| 2 | Active policy | `no_active_policy` | Verifies a policy exists for this agent |
+| 3 | Schedule | `outside_schedule` | Checks current time against allowed days and hours |
+| 4 | Address allowlist | `address_not_allowed` | Verifies destination is in the approved address list |
+| 5 | Blocked actions | `action_blocked` | Checks if the action type is forbidden by policy |
+| 6 | Per-tx limit | `per_tx_limit_exceeded` | Compares USD amount against the single-transaction cap |
+| 7 | Daily quota | `daily_quota_exceeded` | Checks if daily spend budget has remaining capacity |
+| 8 | Monthly quota | `monthly_quota_exceeded` | Checks if monthly spend budget has remaining capacity |
+| 9 | Risk screening | `aegis_critical_risk` | Screens destination address against known exploit signatures |
+| 10 | Reputation | _(approval trigger)_ | Checks EIP-8004 on-chain agent reputation score |
+| 11 | Reason scanner | `reason_blocked` | Scans the reason field for prompt injection patterns |
+| 12 | Approval threshold | _(approval trigger)_ | Triggers approval if amount exceeds configured threshold |
+| 13 | Action approval | _(approval trigger)_ | Triggers approval if action type requires human review |
+| 14 | Selector approval | _(approval trigger)_ | Triggers approval if the 4-byte function selector requires review |
+
+Checks 1 through 9 and check 11 produce hard blocks: the transaction is rejected with an HTTP 422 response containing the `blockReason`. Checks 10, 12, 13, and 14 produce soft blocks: the transaction is paused and sent to the approval queue for human review.
+
+## How does the sequential order matter?
+
+Sequential execution is a deliberate design choice. The order reflects severity: security-critical checks run first, spend-limit checks run in the middle, and approval triggers run last. This means:
+
+- A circuit-broken agent gets an immediate `circuit_breaker_active` response. The engine does not evaluate schedule, allowlist, or spend limits.
+- An agent outside schedule hours gets `outside_schedule` even if the amount would also exceed the per-tx limit. The owner sees the most relevant block reason.
+- Approval triggers only fire after all hard checks pass. You never see an approval request for a transaction that would fail a spend limit check.
+
+This ordering also reduces computation. Risk screening and reason scanning involve external calls (RPC lookups, optional LLM judge). By placing hard checks first, the engine avoids expensive operations when a simple policy rule already blocks the transaction.
+
+## What additional checks does raw validation add?
+
+The raw validation endpoint (`POST /api/validate/raw`, used by self-custodial agents) runs 5 additional checks before the standard 14. These checks verify the EVM transaction parameters that action-based validation does not require.
+
+| Check | Block Reason | What it does |
+|-------|-------------|--------------|
+| Intent hash verification | `intent_hash_mismatch` | Recomputes keccak256 hash and compares to submitted hash |
+| Gas limit | `gas_limit_exceeded` | Compares gas against policy maximum |
+| Native value | `value_wei_exceeded` | Checks ETH/native value against policy cap |
+| Blocked selectors | `selector_blocked` | Checks 4-byte function selector against blocklist |
+| Calldata decoding | _(internal)_ | Decodes ERC20 transfer/approve/swap for USD pricing |
+
+Raw validation also wraps the database writes in a transaction. It inserts the intent with `reserved` status and reserves quota atomically. If the quota check fails after insertion, the intent row is deleted within the same transaction.
+
+## How do approval triggers work?
+
+Four checks produce approval triggers instead of blocks. When any trigger fires, the intent enters `approval_pending` status and the owner receives a notification via dashboard, Slack, or Telegram.
+
+| Trigger | Condition | Approval Reason |
+|---------|-----------|-----------------|
+| Reputation | Agent not registered on-chain or score below 30 | `unknown_agent` or `low_reputation` |
+| Amount threshold | USD amount exceeds `require_approval_above_usd` | `amount_above_threshold` |
+| Action type | Action is in the `require_approval_actions` list | `action_requires_approval` |
+| Selector | 4-byte selector is in the `require_approval_selectors` list | `selector_requires_approval` |
+
+Multiple triggers can fire simultaneously. The approval queue entry includes a human-readable message combining all trigger reasons. The owner sees the full context: which checks triggered, the agent's stated reason, the USD amount, and the destination address.
+
+The approval has a 1-hour TTL. If the owner does not respond within that window, the intent expires and any reserved quota is released.
+
+## How does the circuit breaker work?
+
+The circuit breaker is an emergency stop that blocks all transactions for a specific agent. The owner can activate it manually via the dashboard. The system activates it automatically when an envelope mismatch is detected. The `CircuitBreakerService` uses a two-layer check: in-memory cache first, then database fallback.
+
+There is no automatic reset. The owner must explicitly deactivate it in the dashboard. This is intentional: an envelope mismatch is a security event that requires human investigation.
+
+## How does spend tracking work?
+
+The `QuotaManagerService` tracks three spend dimensions: per-transaction, daily, and monthly. When an intent is validated, the quota manager reserves the USD amount against the agent's budget. If the transaction confirms on-chain, the reservation converts to a permanent spend record. If it fails, expires, or is rejected, the reservation is released.
+
+Daily quotas reset at midnight UTC. Monthly quotas reset on the 1st of each month. The default policy sets a $100 per-transaction limit and a $1,000 daily limit.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Block Reasons Reference" icon="circle-xmark" href="/reference/block-reasons">
+    Complete list of all block reason codes and their meanings.
+  </Card>
+  <Card title="Approval Triggers" icon="bell" href="/reference/approval-triggers">
+    Reference for all conditions that pause transactions for human review.
+  </Card>
+  <Card title="Policy Fields" icon="sliders" href="/reference/policy-fields">
+    Every configurable field in a Mandate policy.
+  </Card>
+  <Card title="Policy Builder" icon="wrench" href="/dashboard/policy-builder">
+    Configure policies visually in the dashboard.
+  </Card>
+</CardGroup>

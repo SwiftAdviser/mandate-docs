@@ -1,0 +1,41 @@
+### Handling approval workflows
+
+When a transaction requires human approval, the SDK throws an `ApprovalRequiredError`. Catch it and poll for the decision:
+
+```typescript
+import {
+  MandateClient,
+  ApprovalRequiredError,
+} from '@mandate/sdk';
+
+const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY! });
+
+try {
+  const result = await client.validate({
+    action: 'transfer',
+    amount: '5000',
+    to: '0xRecipientAddress',
+    token: 'USDC',
+    reason: 'Large vendor payment for Q1 services',
+  });
+  // Transaction approved immediately, proceed
+} catch (err) {
+  if (err instanceof ApprovalRequiredError) {
+    console.log(`Approval needed: ${err.approvalReason}`);
+    console.log(`Waiting for human decision on intent ${err.intentId}...`);
+
+    // Poll until the owner approves or rejects (default timeout: 1 hour)
+    const status = await client.waitForApproval(err.intentId, {
+      timeoutMs: 3600_000,
+      intervalMs: 5_000,
+      onPoll: (s) => console.log(`Status: ${s.status}`),
+    });
+
+    if (status.status === 'approved') {
+      console.log('Approved. Proceeding with transaction.');
+    }
+  }
+}
+```
+
+The owner receives a notification via their configured channel (dashboard, Telegram, or Slack webhook) and can approve or reject with an optional note. See [Approvals Dashboard](/dashboard/approvals) and [Notifications](/dashboard/notifications).

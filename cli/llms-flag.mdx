@@ -1,0 +1,73 @@
+---
+title: "Agent Discovery (--llms)"
+sidebarTitle: "--llms"
+description: "Use the --llms and --llms-full flags to let AI agents discover Mandate CLI commands, schemas, and capabilities programmatically."
+---
+
+## What are `--llms` and `--llms-full`?
+
+These flags expose the CLI's command manifest in a machine-readable format. AI agents call them to discover what Mandate offers before integrating. This follows the [llms.txt standard](https://llmstxt.org/) for AI agent discoverability.
+
+```bash
+npx @mandate.md/cli --llms
+npx @mandate.md/cli --llms-full
+```
+
+No authentication required. No side effects. These are read-only discovery endpoints.
+
+## `--llms`: compact manifest
+
+Returns a structured summary of every command: name, description, and the logical next step. Agents use this to understand the available tools and plan a workflow.
+
+```
+mandate login         Register agent, get runtime key. Next: activate
+mandate activate      Set wallet address. Next: validate
+mandate validate      Policy-check a transaction. Next: transfer or event
+mandate transfer      ERC20 transfer with policy enforcement. Next: event
+mandate event         Post txHash for envelope verification. Next: status
+mandate status        Check intent state. Next: approve
+mandate approve       Wait for human approval. Next: event
+mandate scan          Scan codebase for unprotected wallet calls.
+```
+
+Each entry includes a `next` field pointing to the logical follow-up command. Agents chain commands without hardcoded sequences.
+
+## `--llms-full`: complete manifest
+
+Returns the full command manifest with option schemas, argument types, defaults, and usage examples. This is the complete information an agent needs to construct valid command invocations.
+
+The output includes:
+- Command names and descriptions
+- Zod-derived option schemas with types and constraints
+- Required vs optional flags
+- Example invocations with realistic values
+- Suggested next steps after each command
+
+## How agents use this
+
+An AI agent encountering Mandate for the first time runs `--llms` to understand the tool surface. Based on the response, it constructs a plan:
+
+1. Agent runs `npx @mandate.md/cli --llms` to discover commands
+2. Reads the manifest and identifies `validate` as the entry point
+3. Runs `npx @mandate.md/cli --llms-full` if it needs exact option schemas
+4. Constructs and executes the appropriate command
+
+This eliminates the need for agents to have pre-programmed knowledge of Mandate's CLI interface. The manifest is always current with the installed version.
+
+<Tip>
+For the complete Mandate API reference in a single document, see the [SKILL.md reference](/llms-skill). It covers REST endpoints, SDK methods, and CLI commands in one file optimized for LLM consumption.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP Server Mode" icon="arrow-right" href="/cli/mcp-flag">
+    Expose CLI commands as MCP tools for Claude Desktop and other AI assistants.
+  </Card>
+  <Card title="SKILL.md Reference" icon="arrow-right" href="/llms-skill">
+    The complete API reference optimized for AI agent consumption.
+  </Card>
+  <Card title="Integrations Overview" icon="arrow-right" href="/integrations/overview">
+    All supported agent frameworks and how to connect them.
+  </Card>
+</CardGroup>

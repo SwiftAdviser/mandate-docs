@@ -1,0 +1,115 @@
+---
+title: "GAME SDK (Virtuals Protocol)"
+sidebarTitle: "GAME / Virtuals"
+description: "Integrate Mandate policy enforcement into GAME SDK agents by Virtuals Protocol, with TypeScript and Python examples."
+---
+
+## What is the GAME SDK plugin?
+
+The `@mandate.md/game-plugin` package adds Mandate policy enforcement to [GAME SDK](https://docs.virtuals.io/game-sdk) agents by Virtuals Protocol. It exposes `GameWorker` functions that validate every on-chain action against your Mandate spending policies before execution. Available in both TypeScript and Python.
+
+## Installation
+
+<CodeGroup>
+```bash TypeScript
+bun add @mandate.md/game-plugin @virtuals-protocol/game
+```
+
+```bash Python
+pip install game_sdk mandate_sdk
+```
+</CodeGroup>
+
+For TypeScript, `@virtuals-protocol/game` is a peer dependency (>=0.1.0).
+
+## Usage
+
+<CodeGroup>
+```typescript TypeScript
+import { createMandateWorker } from '@mandate.md/game-plugin';
+
+const worker = createMandateWorker({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  privateKey: process.env.PRIVATE_KEY! as `0x${string}`,
+  chainId: 84532,
+  rpcUrl: 'https://sepolia.base.org',
+});
+
+// Add to your GAME agent
+const agent = new GameAgent({
+  workers: [worker],
+  // ... other configuration
+});
+```
+
+```python Python
+import os
+from mandate_game_plugin import MandatePlugin
+
+plugin = MandatePlugin(
+    runtime_key=os.environ["MANDATE_RUNTIME_KEY"],
+    chain_id=84532,
+    rpc_url="https://sepolia.base.org",
+)
+
+# Use plugin.functions in your GameWorker
+```
+</CodeGroup>
+
+The TypeScript version uses `MandateWallet` from the SDK for local signing. The Python version calls the Mandate API directly via HTTP for validation, and returns the result to the GAME agent for further action.
+
+## Functions
+
+| Function | Description |
+|----------|-------------|
+| `mandate_transfer` | Transfer ERC20 tokens with policy enforcement. Args: `to` (or `to_address`), `amount`, `token_address`. |
+| `mandate_x402_pay` | Pay for an x402-gated resource. Args: `url`. TypeScript only. |
+
+## Configuration
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `runtimeKey` / `runtime_key` | `string` | Yes | Mandate runtime key (`mndt_live_...` or `mndt_test_...`) |
+| `privateKey` / `private_key` | `string` | Yes (TS only) | Agent wallet private key (hex, `0x` prefix) |
+| `chainId` / `chain_id` | `number` / `int` | No | EVM chain ID. Defaults to `84532`. |
+| `rpcUrl` / `rpc_url` | `string` | No | RPC endpoint URL |
+| `workerDescription` | `string` | No | Custom description for the GameWorker (TS only) |
+
+## Error handling
+
+The GAME SDK uses a status-based return model. Functions return a `FunctionResult` with one of three statuses.
+
+| Status | Mandate meaning |
+|--------|-----------------|
+| `done` | Transaction validated and sent. Result contains `txHash` and `intentId`. |
+| `failed` | Blocked by policy. Feedback contains the block reason (e.g., `"Blocked by policy: daily_limit_exceeded"`). |
+| `pending` | Approval required. Feedback contains the `intentId` for polling. |
+
+TypeScript example:
+
+```typescript
+// The worker handles this internally. From the agent's perspective:
+// { status: 'done', result: '{"txHash":"0x...","intentId":"int_abc123"}' }
+// { status: 'failed', result: 'Blocked by policy: monthly_limit_exceeded' }
+// { status: 'pending', result: 'Approval required. IntentId: int_abc123' }
+```
+
+The `getEnvironment()` method on the worker returns `{ chainId, policyEnforcement: 'active' }`, giving the GAME agent context about its operating constraints.
+
+<Tip>
+  The Python plugin uses `urllib.request` with no external HTTP dependencies. It validates the transaction with Mandate but does not sign or broadcast. Your GAME agent handles the actual on-chain execution after validation passes.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Integrations Overview" icon="grid-2" href="/integrations/overview">
+    Compare all supported agent frameworks side by side.
+  </Card>
+  <Card title="SDK Overview" icon="code" href="/sdk/overview">
+    Use the TypeScript SDK directly for maximum control.
+  </Card>
+  <Card title="ACP Plugin" icon="handshake" href="/integrations/acp-virtuals">
+    Add Mandate to ACP (Agent Commerce Protocol) for inter-agent payments.
+  </Card>
+</CardGroup>

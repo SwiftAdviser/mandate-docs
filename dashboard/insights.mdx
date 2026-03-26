@@ -1,0 +1,77 @@
+---
+title: "Insights"
+sidebarTitle: "Insights"
+description: "Review AI-generated policy recommendations based on transaction pattern analysis in the Mandate dashboard."
+---
+
+## What are insights?
+
+Insights are AI-generated recommendations for improving your agent policies. Mandate analyzes transaction patterns, detects anomalies, and suggests specific policy changes. Each insight includes evidence, a confidence score, and actionable suggestions you can apply with one click.
+
+## Insight types
+
+Mandate generates two categories of insights:
+
+| Type | Description |
+|------|-------------|
+| **mandate_rule** | Suggests adding, modifying, or removing a policy rule based on observed behavior. |
+| **pattern_detection** | Identifies recurring transaction patterns that may indicate a need for policy adjustment. |
+
+## Confidence levels
+
+Each insight carries a confidence score that determines its label:
+
+| Label | Score range | Meaning |
+|-------|------------|---------|
+| **STRONG RECOMMENDATION** | > 0.85 | High-confidence suggestion backed by significant evidence. Act on these first. |
+| **RECOMMENDATION** | > 0.70 | Solid suggestion with good evidence. Worth reviewing carefully. |
+| **EARLY SIGNAL** | > 0.55 | Emerging pattern with limited evidence. Monitor before acting. |
+| **SUGGESTION** | < 0.55 | Low-confidence observation. Consider but do not prioritize. |
+
+The confidence bar uses a 5-bar visual indicator. A score of 0.85 fills approximately 4.25 bars, giving you a quick visual read on strength.
+
+## Insight card anatomy
+
+Each insight card displays:
+
+- **Title**: a concise description of the recommendation.
+- **Evidence count**: how many transactions contributed to this insight (e.g., "Based on 47 transactions").
+- **Suggested changes**: the specific policy fields and values to update. Shows the target section (e.g., "spend_limits.daily") and the proposed value.
+- **Confidence bar**: 5-bar visual showing the confidence score.
+- **Confidence label**: STRONG RECOMMENDATION, RECOMMENDATION, EARLY SIGNAL, or SUGGESTION.
+
+## Taking action
+
+Two actions are available for each insight:
+
+### Accept
+
+Click **Accept** to apply the suggested policy changes to the agent. Mandate creates a new policy version incorporating the recommendation. The previous policy version is deactivated, same as a manual save in the [policy builder](/dashboard/policy-builder).
+
+<Note>
+Accepting an insight creates a new policy version. Review the suggested changes in the card before accepting to confirm they match your intentions.
+</Note>
+
+### Dismiss
+
+Click **Dismiss** to remove the insight from your queue. Dismissed insights do not reappear for the same pattern. If the pattern changes significantly, Mandate may generate a new insight.
+
+## Example insights
+
+- "This agent transfers to the same 3 addresses in 98% of transactions. Consider setting an allowed address list." (pattern_detection, confidence 0.91)
+- "Daily spend has never exceeded $120 in the past 30 days. Consider lowering the daily limit from $500 to $200." (mandate_rule, confidence 0.78)
+- "Agent attempted 4 swap operations that were blocked. If swaps are intentional, add swap to allowed actions." (mandate_rule, confidence 0.62)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Policy Builder" icon="shield-check" href="/dashboard/policy-builder">
+    Manually adjust policy fields alongside insight recommendations.
+  </Card>
+  <Card title="Policy Engine" icon="gears" href="/concepts/policy-engine">
+    Understand the 14 checks that generate the data insights analyze.
+  </Card>
+  <Card title="Dashboard Overview" icon="gauge" href="/dashboard/overview">
+    Return to the dashboard home page for a summary view.
+  </Card>
+</CardGroup>

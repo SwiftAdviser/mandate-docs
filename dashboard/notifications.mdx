@@ -1,0 +1,84 @@
+---
+title: "Notifications"
+sidebarTitle: "Notifications"
+description: "Configure Telegram, Slack, Discord, and webhook notifications for agent events in the Mandate dashboard."
+---
+
+## Why configure notifications?
+
+Notifications ensure you act on time-sensitive events without watching the dashboard constantly. When an agent needs approval, a transaction fails, or the circuit breaker trips, you receive an alert through your preferred channel.
+
+## Notification channels
+
+### Telegram
+
+Connect your Telegram account to receive notifications via [@mandatemd_bot](https://t.me/mandatemd_bot):
+
+1. Click **Link Telegram** on the Notifications page.
+2. Mandate generates an 8-character verification code.
+3. Open a chat with @mandatemd_bot in Telegram.
+4. Send the verification code as a message.
+5. The bot confirms the link. Notifications start immediately.
+
+<Tip>
+Pin the @mandatemd_bot chat in Telegram so approval requests are easy to find.
+</Tip>
+
+### Slack
+
+Send notifications to a Slack channel via incoming webhook:
+
+1. Create an [incoming webhook](https://api.slack.com/messaging/webhooks) in your Slack workspace.
+2. Paste the webhook URL on the Notifications page.
+3. Click **Save**. Mandate sends a test message to confirm delivery.
+
+Notifications appear in your chosen Slack channel with formatted cards showing the event details.
+
+### Discord
+
+Discord integration is coming soon. The configuration section is visible in the dashboard but not yet active. Check back for updates.
+
+### Custom webhook
+
+For custom integrations, configure a webhook endpoint:
+
+1. Enter your endpoint URL.
+2. Optionally set a secret header for [signature verification](/dashboard/webhooks).
+3. Click **Save**.
+
+Mandate sends JSON payloads to your URL for every configured event. See the [Webhooks](/dashboard/webhooks) page for payload format, retry policy, and signature verification details.
+
+## Triggering events
+
+Configure which events generate notifications:
+
+| Event | Description |
+|-------|-------------|
+| **approval_pending** | A new transaction requires your manual approval. This is the most time-sensitive event. |
+| **intent_confirmed** | A transaction has been confirmed on-chain. Useful for monitoring. |
+| **intent_failed** | A transaction failed (policy block, on-chain revert, or envelope mismatch). Investigate promptly. |
+| **circuit_breaker_tripped** | The circuit breaker activated for an agent. Immediate attention required. |
+
+Enable or disable each event type per channel. For example, send all events to a custom webhook for logging, but only `approval_pending` and `circuit_breaker_tripped` to Telegram for immediate alerts.
+
+## Test button
+
+Each configured channel has a **Test** button that sends a sample notification. Use this to verify your setup works before relying on it for production alerts. The test payload includes a sample event with realistic data.
+
+<Warning>
+If the test notification does not arrive, verify the channel configuration. For Telegram, ensure the bot is not blocked. For Slack, verify the webhook URL is still valid. For custom webhooks, check that your server returns a 2xx status.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Webhooks" icon="plug" href="/dashboard/webhooks">
+    Technical details on payload format, retries, and signature verification.
+  </Card>
+  <Card title="Approvals" icon="clipboard-check" href="/dashboard/approvals">
+    Review and act on pending approval notifications.
+  </Card>
+  <Card title="Handle Approvals (Guide)" icon="book-open" href="/guides/handle-approvals">
+    Best practices for responding to approval notifications quickly.
+  </Card>
+</CardGroup>

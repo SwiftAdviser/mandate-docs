@@ -1,0 +1,119 @@
+---
+title: "CI/CD Integration"
+sidebarTitle: "CI/CD"
+description: "Add the Mandate codebase scanner to your CI/CD pipeline. Catch unprotected wallet calls before they reach production with GitHub Actions, GitLab CI, or pre-commit hooks."
+---
+
+## Why scan in CI?
+
+Every unprotected wallet call is a potential unvalidated transaction in production. The Mandate scanner catches these gaps at the code level, before deployment. It exits with code 1 if it finds calls missing Mandate validation, which fails the build and blocks the merge.
+
+Running the scanner in CI means no developer can accidentally ship a `sendTransaction()` or `transfer()` call without a corresponding `validate()`. This is your last line of defense before code reaches production.
+
+## GitHub Actions
+
+Add the scanner as a step in your existing workflow or create a dedicated security scan job. The scanner requires no authentication and no configuration.
+
+```yaml
+name: Mandate Security Scan
+on: [push, pull_request]
+
+jobs:
+  mandate-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Scan for unprotected calls
+        run: npx @mandate.md/cli scan ./src
+```
+
+The job fails if any unprotected wallet call is detected. Add `--json` to pipe structured output into downstream steps or artifact uploads.
+
+## GitLab CI
+
+Add a scan stage to your `.gitlab-ci.yml`. The `merge_request_event` rule ensures the scan runs on every merge request.
+
+```yaml
+mandate-scan:
+  image: node:20
+  script:
+    - npx @mandate.md/cli scan ./src
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+```
+
+For monorepos, point the scanner at the specific directory containing agent code. You can run multiple scan steps targeting different paths.
+
+## Pre-commit hook
+
+Catch unprotected calls before they even enter version control. Add this hook to `.git/hooks/pre-commit` or use a framework like Husky.
+
+```bash
+#!/bin/sh
+# .git/hooks/pre-commit
+npx @mandate.md/cli scan ./src || {
+  echo "Unprotected wallet calls found. Run 'npx @mandate.md/cli scan' for details."
+  exit 1
+}
+```
+
+Make the hook executable with `chmod +x .git/hooks/pre-commit`. For team-wide enforcement, commit the hook via Husky or `simple-git-hooks` in your `package.json`.
+
+## What does the scanner check?
+
+The scanner detects 10 financial call patterns across `.ts`, `.js`, `.tsx`, and `.jsx` files:
+
+| Pattern | Description |
+|---------|-------------|
+| `sendTransaction(` | Generic transaction sends |
+| `sendRawTransaction(` | Raw transaction sends |
+| `wallet.transfer(` | Direct wallet transfers |
+| `wallet.send(` | Shorthand send calls |
+| `writeContract(` | Viem contract writes |
+| `walletClient.write` | Viem wallet client writes |
+| `executeAction(...transfer)` | Framework action executions |
+| `execute_swap` | Swap execution functions |
+| `execute_trade` | Trade execution functions |
+
+A call is marked **protected** if the file imports from `@mandate`, references `MandateClient`, `MandateWallet`, `mandate.validate`, or `mandate.preflight`. Project-level protection applies when `@mandate.md/sdk` appears in any `package.json` or a `MANDATE.md` file exists at the root.
+
+## How do you fix findings?
+
+Wrap each unprotected transaction call with a `validate()` call in the same function scope. The minimal fix:
+
+```typescript
+import { MandateClient } from '@mandate/sdk';
+
+const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY });
+
+// Before: unprotected
+await wallet.sendTransaction({ to, value, data });
+
+// After: protected
+await client.validate({ action: 'transfer', to, amount, reason: 'Payment for service' });
+await wallet.sendTransaction({ to, value, data });
+```
+
+For high-level flows, use `MandateWallet` which handles validation, signing, and event reporting in a single call. See [Validate Transactions](/guides/validate-transactions) for the full pattern.
+
+<Tip>
+Run the scanner with `--verbose` locally to see both protected and unprotected calls. This gives you a complete picture of all financial operations in your codebase.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Codebase Scanner Guide" icon="magnifying-glass" href="/guides/codebase-scanner">
+    Detailed walkthrough of scanner patterns, ignore rules, and remediation steps.
+  </Card>
+  <Card title="Scan CLI Reference" icon="terminal" href="/cli/scan">
+    Full flag reference, exit codes, and output formats for the scan command.
+  </Card>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Add validation to the unprotected calls the scanner found.
+  </Card>
+</CardGroup>

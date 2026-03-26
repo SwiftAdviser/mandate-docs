@@ -1,0 +1,148 @@
+---
+title: "Scan"
+sidebarTitle: "scan"
+description: "Scan your codebase for unprotected wallet and financial calls that bypass Mandate validation. Zero config, zero auth, CI-friendly."
+---
+
+## What does `scan` do?
+
+The `scan` command walks your TypeScript and JavaScript files looking for wallet calls (`.sendTransaction()`, `.transfer()`, `writeContract()`, and 7 other patterns) that do not have a corresponding Mandate validation in the same file. It requires no authentication and no configuration.
+
+## Usage
+
+```bash
+# Scan current directory
+npx @mandate.md/cli scan
+
+# Scan a specific directory
+npx @mandate.md/cli scan ./src/agents
+```
+
+## Arguments
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `directory` | No | `.` (current directory) | Path to the directory to scan |
+
+## Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--json` | No | Output results as JSON instead of human-readable text |
+| `--verbose` | No | Show all findings, including protected calls |
+| `--ignore` | No | Comma-separated glob patterns to skip (e.g. `tests,scripts`) |
+| `--no-telemetry` | No | Disable anonymous scan telemetry |
+
+## Patterns detected
+
+The scanner looks for 10 financial call patterns in `.ts`, `.js`, `.tsx`, and `.jsx` files:
+
+| Pattern | Example |
+|---------|---------|
+| `wallet.transfer(` | Direct wallet transfer calls |
+| `wallet.sendTransaction(` | Generic transaction sends |
+| `wallet.send(` | Shorthand send calls |
+| `.sendTransaction(` | Any object's sendTransaction |
+| `.sendRawTransaction(` | Raw transaction sends |
+| `writeContract(` | Viem contract writes |
+| `walletClient.write` | Viem wallet client writes |
+| `executeAction(...transfer)` | Framework action executions |
+| `execute_swap` | Swap execution functions |
+| `execute_trade` | Trade execution functions |
+
+A call is marked **protected** if the file imports from `@mandate`, references `MandateClient`, `MandateWallet`, `mandate.validate`, or `mandate.preflight`. The scanner also checks for project-level protection: if `@mandate.md/sdk` appears in any `package.json` or a `MANDATE.md` file exists, all findings are marked protected.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | No unprotected calls found (clean) |
+| `1` | One or more unprotected calls detected |
+
+## Human-readable output
+
+```
+  Mandate Scan v0.2.0
+
+  Scanning ./src/agents ...
+
+    src/agents/trader.ts
+      L42  wallet.sendTransaction({...})  UNPROTECTED
+      L87  execute_swap(params)            UNPROTECTED
+
+    src/agents/payer.ts
+      L15  wallet.transfer(to, amount)     UNPROTECTED
+
+  3 unprotected calls found across 12 files.
+  Fix: https://mandate.md/docs/quickstart
+```
+
+## JSON output
+
+```bash
+npx @mandate.md/cli scan --json
+```
+
+```json
+{
+  "filesScanned": 12,
+  "findings": [
+    {
+      "file": "src/agents/trader.ts",
+      "line": 42,
+      "pattern": "wallet.sendTransaction(",
+      "match": "  await wallet.sendTransaction({...})",
+      "protected": false
+    }
+  ],
+  "summary": { "total": 3, "protected": 0, "unprotected": 3 },
+  "version": "0.2.0"
+}
+```
+
+## CI integration
+
+Add the scan to your CI pipeline. The exit code 1 fails the build if unprotected calls exist.
+
+**GitHub Actions:**
+
+```yaml
+- name: Mandate scan
+  run: npx @mandate.md/cli scan ./src
+```
+
+**Pre-commit hook:**
+
+```bash
+#!/bin/sh
+npx @mandate.md/cli scan || exit 1
+```
+
+**GitLab CI:**
+
+```yaml
+mandate-scan:
+  script:
+    - npx @mandate.md/cli scan ./src
+  allow_failure: false
+```
+
+The `--json` flag is useful for programmatic processing in CI. Pipe it to `jq` to extract specific fields or fail on thresholds.
+
+<Tip>
+Run `scan` early in your pipeline, before tests. It catches missing validation at the code level, not at runtime.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Codebase Scanner Guide" icon="arrow-right" href="/guides/codebase-scanner">
+    Detailed walkthrough of scanner patterns and remediation steps.
+  </Card>
+  <Card title="CI/CD Integration" icon="arrow-right" href="/guides/ci-cd">
+    Set up Mandate checks in your deployment pipeline.
+  </Card>
+  <Card title="Validate Transactions" icon="arrow-right" href="/cli/validate">
+    Add validation to the unprotected calls the scanner found.
+  </Card>
+</CardGroup>

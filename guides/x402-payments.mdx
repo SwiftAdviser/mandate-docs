@@ -1,0 +1,146 @@
+---
+title: "x402 Payment Protocol"
+sidebarTitle: "x402 Payments"
+description: "Integrate HTTP 402 payments into your agent with Mandate policy enforcement. One-line x402Pay or manual flow with full validation."
+---
+
+## What is x402?
+
+x402 is an HTTP-native payment protocol. A server returns HTTP 402 (Payment Required) with payment details in a header. The client pays, then retries the request with proof of payment. No API keys, no subscriptions: the agent pays per-request.
+
+This pattern is gaining traction for AI agent APIs where usage-based billing makes more sense than monthly plans. Your agent discovers the price at request time, pays through its wallet, and gets access.
+
+## How the x402 flow works
+
+The protocol follows five steps:
+
+1. **Agent requests a resource.** Standard GET or POST to the API endpoint.
+2. **Server returns HTTP 402.** The response includes an `X-Payment-Required` header (or `X-Payment-Info`) containing a JSON object.
+3. **Header contains payment details.** The JSON includes `amount`, `currency`, `paymentAddress`, `chainId`, and optionally `tokenAddress`.
+4. **Agent pays through Mandate.** The transfer goes through the same policy engine as any other transaction. Spend limits, allowlists, and approval rules all apply.
+5. **Agent retries with proof.** The original request is sent again with `Payment-Signature` and `X-Payment-TxHash` headers set to the transaction hash.
+
+```
+Agent                        Server
+  |                            |
+  |--- GET /premium-data ----->|
+  |<-- 402 + X-Payment-Required|
+  |                            |
+  |--- transfer (Mandate) ---->|  (policy-checked)
+  |                            |
+  |--- GET /premium-data ----->|
+  |    + Payment-Signature     |
+  |<-- 200 + data -------------|
+```
+
+## SDK: wallet.x402Pay()
+
+`MandateWallet.x402Pay()` handles the entire flow in one call. It probes the URL, parses the 402 header, executes the transfer through Mandate validation, and retries with the payment proof.
+
+```typescript
+import { MandateWallet } from '@mandate/sdk';
+
+const wallet = new MandateWallet({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  privateKey: process.env.AGENT_PRIVATE_KEY! as `0x${string}`,
+  chainId: 84532,
+});
+
+// One line: probe, pay, retry
+const response = await wallet.x402Pay(
+  'https://api.example.com/premium-data',
+  { reason: 'Purchasing premium API data for market analysis' },
+);
+
+const data = await response.json();
+```
+
+If the URL does not return 402, `x402Pay()` returns the original response unchanged. No payment is attempted. This makes it safe to wrap any request: pay-walled endpoints trigger payment, free endpoints pass through.
+
+<Note>
+The `reason` field defaults to `"x402 payment for {url}"` when not provided. A descriptive reason improves your audit log and helps the policy engine evaluate the transaction context.
+</Note>
+
+## Manual flow
+
+If you need more control or use `MandateClient` directly, handle each step yourself.
+
+### 1. Probe the endpoint
+
+```typescript
+const probe = await fetch('https://api.example.com/premium-data');
+
+if (probe.status !== 402) {
+  // No payment required, use response directly
+  const data = await probe.json();
+}
+```
+
+### 2. Parse the payment header
+
+```typescript
+const header = probe.headers.get('X-Payment-Required')
+  ?? probe.headers.get('X-Payment-Info');
+
+if (!header) throw new Error('402 response missing payment header');
+
+const payment = JSON.parse(header) as {
+  amount: string;
+  currency: string;
+  paymentAddress: `0x${string}`;
+  chainId: number;
+  tokenAddress?: `0x${string}`;
+};
+```
+
+### 3. Execute the transfer through Mandate
+
+```typescript
+const result = await wallet.transfer(
+  payment.paymentAddress,
+  payment.amount,
+  payment.tokenAddress ?? '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  { reason: `x402 payment for ${url}` },
+);
+```
+
+### 4. Retry with proof
+
+```typescript
+const response = await fetch('https://api.example.com/premium-data', {
+  headers: {
+    'Payment-Signature': result.txHash,
+    'X-Payment-TxHash': result.txHash,
+  },
+});
+```
+
+## Policy considerations
+
+x402 payments go through the same policy engine as every other transaction. Your MANDATE.md rules and dashboard policies apply in full. A few things to plan for:
+
+- **Spend limits**: Set per-transaction limits high enough for the services your agent uses. A $5 API call blocked by a $1 per-tx limit is a common misconfiguration.
+- **Address allowlists**: If you use an allowlist, add the payment addresses of services your agent calls. Otherwise x402 payments will be blocked with `address_not_allowed`.
+- **Approval thresholds**: Decide whether x402 payments should require human approval above a certain amount. A low threshold means your agent pauses for approval on expensive API calls.
+- **Reason field**: Always provide a descriptive reason. The default `"x402 payment for {url}"` is acceptable, but specific reasons like `"Market data API, hourly price feed"` produce better audit logs.
+
+<Warning>
+x402 servers control the payment amount in their 402 response. A compromised or malicious server could request an inflated amount. Spend limits protect your agent: set a per-transaction cap that matches the expected price range of the services your agent uses.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MandateWallet Reference" icon="wallet" href="/sdk/mandate-wallet">
+    Full API reference for x402Pay, transfer, sendEth, and sendTransaction.
+  </Card>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Understand the validation flow that x402 payments go through.
+  </Card>
+  <Card title="Chain Reference" icon="link" href="/reference/chain-reference">
+    Supported chains, token addresses, and RPC endpoints.
+  </Card>
+  <Card title="Handle Errors" icon="triangle-exclamation" href="/guides/handle-errors">
+    Catch PolicyBlockedError and other exceptions from x402 transfers.
+  </Card>
+</CardGroup>

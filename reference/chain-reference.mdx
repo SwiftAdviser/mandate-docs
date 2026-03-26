@@ -1,0 +1,81 @@
+---
+title: "Chain Reference"
+sidebarTitle: "Chain Reference"
+description: "Supported chains, chain IDs, USDC contract addresses, and runtime key prefixes for Mandate."
+---
+
+## Supported chains
+
+Mandate supports 4 EVM chains: 2 mainnets and 2 testnets. Your runtime key prefix determines which chains you can use.
+
+| Chain | Chain ID | USDC Address | Decimals | Key Prefix |
+|-------|----------|-------------|----------|------------|
+| Ethereum Mainnet | `1` | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` | 6 | `mndt_live_*` |
+| Ethereum Sepolia | `11155111` | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` | 6 | `mndt_test_*` |
+| Base Mainnet | `8453` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | 6 | `mndt_live_*` |
+| Base Sepolia | `84532` | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | 6 | `mndt_test_*` |
+
+## Test vs live keys
+
+Runtime keys use prefixes to enforce environment separation:
+
+- **`mndt_test_*`** keys work with testnet chains (Sepolia, Base Sepolia). Use these for development and testing. Testnet usage is free.
+- **`mndt_live_*`** keys work with mainnet chains (Ethereum, Base). Use these for production deployments.
+
+A test key cannot validate transactions on mainnet. A live key cannot validate transactions on testnet. This prevents accidental production transactions during development.
+
+## SDK constants
+
+The SDK exports chain and token constants so you avoid hardcoding addresses:
+
+```typescript
+import { CHAIN_ID, USDC } from '@mandate.md/sdk';
+
+// Chain IDs
+CHAIN_ID.ETHEREUM         // 1
+CHAIN_ID.SEPOLIA          // 11155111
+CHAIN_ID.BASE             // 8453
+CHAIN_ID.BASE_SEPOLIA     // 84532
+
+// USDC addresses
+USDC.ETHEREUM             // 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
+USDC.SEPOLIA              // 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+USDC.BASE                 // 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+USDC.BASE_SEPOLIA         // 0x036CbD53842c5426634e7929541eC2318f3dCF7e
+```
+
+## Default RPCs
+
+When using `MandateWallet`, you can specify a custom RPC URL in the configuration. If you do not, the SDK uses public default RPCs:
+
+| Chain | Default RPC |
+|-------|-------------|
+| Ethereum Mainnet | `https://eth.llamarpc.com` |
+| Ethereum Sepolia | `https://rpc.sepolia.org` |
+| Base Mainnet | `https://mainnet.base.org` |
+| Base Sepolia | `https://sepolia.base.org` |
+
+<Tip>
+For production use, configure a dedicated RPC provider (Alchemy, Infura, QuickNode) to avoid rate limits and improve reliability.
+</Tip>
+
+## Getting started on testnet
+
+The fastest way to test Mandate is with a `mndt_test_*` key on Base Sepolia:
+
+1. Register an agent using `mandate login --name "TestAgent" --address 0xYourAddress`.
+2. Fund your test wallet with Base Sepolia ETH and test USDC from a faucet.
+3. Validate a transaction: `mandate validate --action transfer --reason "Test payment" --amount 1 --to 0xRecipient`.
+
+No real funds are at risk. Testnet validation behaves identically to mainnet, including all 14 policy checks.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SDK Constants" icon="list-ol" href="/sdk/constants">
+    Full reference for all exported constants in the SDK.
+  </Card>
+  <Card title="Credential Management" icon="key" href="/security/credential-management">
+    Store and rotate runtime keys securely.
+  </Card>
+</CardGroup>

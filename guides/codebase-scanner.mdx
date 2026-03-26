@@ -1,0 +1,134 @@
+---
+title: "Codebase Scanner"
+sidebarTitle: "Codebase Scanner"
+description: "Detect unprotected wallet and transaction calls in your codebase. Run the scanner via CLI, integrate into CI, or let plugins scan automatically on startup."
+---
+
+## What does the scanner detect?
+
+The Mandate scanner finds wallet and transaction calls in your codebase that lack policy enforcement. It looks for 10 financial call patterns:
+
+- `sendTransaction()`, `sendRawTransaction()` on any object
+- `wallet.transfer()`, `wallet.send()`, `wallet.sendTransaction()`
+- `writeContract()`, `walletClient.write`
+- `executeAction(...transfer)`, `execute_swap`, `execute_trade`
+
+For each match, the scanner checks whether the file imports Mandate (`MandateClient`, `MandateWallet`, or `@mandate` imports) or whether the project has the SDK installed as a dependency. Calls without Mandate protection are flagged as unprotected.
+
+The scanner also recognizes project-level protection signals: `@mandate/sdk` in `package.json`, a `MANDATE.md` file in the project root, or a `.mandate/` configuration directory. When any of these exist, all findings are marked as protected.
+
+## Run the scanner
+
+Use the CLI to scan your codebase:
+
+```bash
+# Scan current directory
+npx @mandate/cli scan
+
+# Scan a specific directory
+npx @mandate/cli scan ./src/agents
+
+# Output as JSON (for programmatic use)
+npx @mandate/cli scan --json
+
+# Show all findings, including protected ones
+npx @mandate/cli scan --verbose
+
+# Ignore specific directories
+npx @mandate/cli scan --ignore test,scripts
+```
+
+The scanner checks `.ts`, `.js`, `.tsx`, and `.jsx` files. It skips `node_modules`, `dist`, `.git`, and `build` directories by default.
+
+## Reading the output
+
+The scanner prints each unprotected call with its file path, line number, and a snippet of the matching code:
+
+```
+  Mandate Scan v0.2.0
+
+  Scanning ./src ...
+
+    src/agents/trader.ts
+      L45  await wallet.sendTransaction({to: vault, ...  UNPROTECTED
+
+    src/utils/payout.ts
+      L12  writeContract({abi: erc20Abi, ...              UNPROTECTED
+
+  2 unprotected calls found across 38 files.
+  Fix: https://mandate.md/docs/quickstart
+```
+
+**Exit code 0**: all financial calls are protected (or none found). **Exit code 1**: at least one unprotected call exists. This makes the scanner usable as a CI gate.
+
+## CI integration
+
+### GitHub Actions
+
+Add a scan step to your workflow. The exit code fails the build when unprotected calls are found.
+
+```yaml
+name: Mandate Security Scan
+on: [push, pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx @mandate/cli scan ./src
+```
+
+### Pre-commit hook
+
+Block commits that introduce unprotected wallet calls:
+
+```bash
+#!/bin/sh
+npx @mandate/cli scan ./src || exit 1
+```
+
+Save this as `.git/hooks/pre-commit` and make it executable with `chmod +x .git/hooks/pre-commit`. For team-wide enforcement, use a tool like [husky](https://github.com/typicode/husky) or [lefthook](https://github.com/evilmartians/lefthook) to distribute the hook.
+
+### JSON output for custom reporting
+
+Use `--json` to get structured output for dashboards or Slack notifications:
+
+```bash
+npx @mandate/cli scan --json | jq '.summary'
+```
+
+```json
+{
+  "total": 5,
+  "protected": 3,
+  "unprotected": 2
+}
+```
+
+## Auto-scan in plugins
+
+The [Claude Code plugin](/integrations/claude-code) and [OpenClaw plugin](/integrations/openclaw) run the scanner automatically on session start. When you open a project with the plugin installed, the scanner checks your codebase and reports findings inline. No configuration needed.
+
+The plugin scanner uses the same detection patterns as the CLI. If it finds unprotected calls, you see the results before your first interaction. This makes it impossible to miss unguarded transaction paths in your agent code.
+
+<Tip>
+Run the scanner after every refactor that touches wallet or transaction logic. New call paths are easy to introduce, and the scanner catches them before they reach production.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CLI Scan Reference" icon="magnifying-glass" href="/cli/scan">
+    Full flag reference and advanced options for the scan command.
+  </Card>
+  <Card title="CI/CD Guide" icon="gear" href="/guides/ci-cd">
+    Set up continuous Mandate enforcement in your deployment pipeline.
+  </Card>
+  <Card title="Claude Code Plugin" icon="terminal" href="/integrations/claude-code">
+    Auto-scan on startup with two-phase transaction enforcement.
+  </Card>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Learn the validation flow that protects your agent's transactions.
+  </Card>
+</CardGroup>

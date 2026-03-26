@@ -1,0 +1,121 @@
+---
+title: "Policy Fields"
+sidebarTitle: "Policy Fields"
+description: "Complete schema reference for every configurable field in a Mandate agent policy, with types, defaults, and descriptions."
+---
+
+## What is a policy?
+
+A policy is a set of rules that govern what an agent can do. Every agent has exactly one active policy at a time. When a transaction is validated, the policy engine evaluates it against these fields in sequential order. You configure policies through the [Policy Builder](/dashboard/policy-builder) in the dashboard or via the `POST /api/agents/{agentId}/policies` endpoint.
+
+New agents receive a default policy after claiming: $100 per-transaction limit, $1,000 daily limit, risk scanning enabled, and no address restrictions.
+
+## Policy schema
+
+### Spend limits
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `spend_limit_per_tx_usd` | `decimal` | `100` | Maximum USD value for a single transaction. Any transaction above this amount is blocked with `per_tx_limit_exceeded`. |
+| `spend_limit_per_day_usd` | `decimal` | `1000` | Maximum cumulative USD spend per day. Resets at midnight UTC. Exceeding this triggers `daily_quota_exceeded`. |
+| `spend_limit_per_month_usd` | `decimal` | `null` | Maximum cumulative USD spend per month. Resets on the 1st of each month. When `null`, no monthly cap is enforced. |
+
+Spend limits use a reservation system. When an intent is validated, the amount is reserved against the budget. Reservations are released when intents fail, expire, or are rejected. They convert to permanent spend records when confirmed on-chain.
+
+### Address controls
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `allowed_addresses` | `string[]` | `null` | Whitelist of permitted destination addresses. When `null`, all addresses are allowed. When set, only listed addresses pass the allowlist check. |
+| `allowed_contracts` | `string[]` | `null` | Whitelist of permitted contract addresses. Separate from `allowed_addresses` to distinguish EOA recipients from contract interactions. When `null`, all contracts are allowed. |
+
+<Tip>
+Set `allowed_addresses` to restrict where funds can go. This is the strongest protection against prompt injection attacks that attempt to redirect transfers to attacker-controlled addresses.
+</Tip>
+
+### Action controls
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `blocked_actions` | `string[]` | `[]` | Action types the agent is forbidden from performing. If the agent submits a validation with an `action` field matching any entry, the request is blocked with `action_blocked`. Example: `["bet", "bridge"]`. |
+| `blocked_selectors` | `string[]` | `[]` | 4-byte function selectors the agent cannot call. Raw validation only. Example: `["0x095ea7b3"]` blocks ERC20 `approve` calls. Triggers `selector_blocked`. |
+
+### Approval rules
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `require_approval_above_usd` | `decimal` | `null` | USD threshold above which transactions require human approval. When `null`, no amount-based approval is required. Example: set to `500` and any transaction above $500 pauses for approval. |
+| `require_approval_actions` | `string[]` | `[]` | Action types that always require human approval, regardless of amount. Example: `["bridge", "stake"]` sends all bridge and stake requests to the approval queue. |
+| `require_approval_selectors` | `string[]` | `[]` | 4-byte function selectors that require approval. Raw validation only. Example: `["0x095ea7b3"]` requires approval for ERC20 `approve` calls. |
+
+### EVM transaction limits (raw validation only)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max_gas_limit` | `string` | `null` | Maximum gas limit (hex string). Raw validation only. When `null`, no gas cap is enforced. Example: `"0x1e8480"` (2,000,000 gas). Exceeding triggers `gas_limit_exceeded`. |
+| `max_value_wei` | `string` | `null` | Maximum native value in wei (hex string). Raw validation only. When `null`, no native value cap is enforced. Exceeding triggers `value_wei_exceeded`. |
+
+### Schedule
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `schedule` | `JSON` | `null` | Time-of-day and day-of-week restrictions. When `null`, transactions are allowed at any time. Format: `{"days": [1,2,3,4,5], "hours": [9,10,11,12,13,14,15,16,17]}` restricts to weekdays 9am-5pm UTC. |
+
+The `days` array uses ISO day numbers: 1 (Monday) through 7 (Sunday). The `hours` array lists allowed hours in 24-hour UTC format. Both arrays must be present in the schedule object.
+
+### Guard rules
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `guard_rules` | `string` | `null` | Free-text policy rules written in MANDATE.md format. Passed to the optional LLM judge during reason scanning. Use this to express nuanced rules that structured fields cannot capture. Example: "Never approve transactions to addresses you haven't interacted with before." |
+
+See [Write MANDATE.md](/guides/write-mandate-md) for best practices on writing guard rules.
+
+### System fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `risk_scan_enabled` | `boolean` | `true` | Enable Aegis risk screening on destination addresses. When `true`, addresses flagged as CRITICAL are blocked and HIGH-risk addresses trigger approval. |
+| `is_active` | `boolean` | `true` | Whether this policy is active. Only one active policy per agent. Setting a new policy as active deactivates the previous one. |
+| `version` | `integer` | `1` | Auto-incremented on each policy update. Used for audit trail and rollback identification. Read-only. |
+
+## Example policy
+
+A production-ready policy for a trading agent:
+
+```json
+{
+  "spend_limit_per_tx_usd": 250,
+  "spend_limit_per_day_usd": 5000,
+  "spend_limit_per_month_usd": 50000,
+  "allowed_addresses": null,
+  "allowed_contracts": ["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"],
+  "blocked_actions": ["bet"],
+  "blocked_selectors": [],
+  "require_approval_above_usd": 1000,
+  "require_approval_actions": ["bridge"],
+  "require_approval_selectors": [],
+  "max_gas_limit": null,
+  "max_value_wei": null,
+  "schedule": { "days": [1, 2, 3, 4, 5], "hours": [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20] },
+  "guard_rules": null,
+  "risk_scan_enabled": true,
+  "is_active": true
+}
+```
+
+This policy allows swaps and transfers up to $250 each, $5,000/day, $50,000/month. Bridges require approval. Bets are blocked. Transactions above $1,000 require approval. Only the Base USDC contract is allowed. Trading hours: weekdays 8am-8pm UTC.
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Policy Builder" icon="wrench" href="/dashboard/policy-builder">
+    Configure policies visually in the dashboard.
+  </Card>
+  <Card title="Write MANDATE.md" icon="file-lines" href="/guides/write-mandate-md">
+    Author guard rules for nuanced policy enforcement.
+  </Card>
+  <Card title="Policy Engine Concepts" icon="brain" href="/concepts/policy-engine">
+    How the 14-check pipeline evaluates transactions against your policy.
+  </Card>
+</CardGroup>

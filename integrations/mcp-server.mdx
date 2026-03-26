@@ -1,0 +1,112 @@
+---
+title: "MCP Server"
+sidebarTitle: "MCP Server"
+description: "Deploy a Mandate MCP server on Cloudflare Workers to give any MCP-compatible AI client access to Mandate validation tools."
+---
+
+## What is the Mandate MCP server?
+
+The `@mandate.md/mcp-server` package is a [Model Context Protocol](https://modelcontextprotocol.io) server built on Cloudflare Workers. It exposes two tools: `search` (look up Mandate schemas and examples) and `execute` (call the Mandate API for validation, registration, and status checks). Any MCP-compatible client can connect to it via SSE transport.
+
+The server uses `@cloudflare/agents` v0.0.16 and extends `McpAgent<Env>`.
+
+## Tools
+
+| Tool | Description |
+|------|-------------|
+| `search` | Look up Mandate schemas, policy fields, and example payloads. Use this before calling `execute` to understand the correct request format. Query examples: `"validate schema"`, `"register schema"`, `"policy fields"`. |
+| `execute` | Call the Mandate API. Actions: `validate` (check if a transaction is allowed), `register` (create a new agent), `status` (get intent status). |
+
+## Deploy to Cloudflare Workers
+
+Clone the package, install dependencies, set secrets, and deploy.
+
+```bash
+cd packages/mcp-server
+bun install
+bunx wrangler secret put MANDATE_RUNTIME_KEY
+bunx wrangler deploy
+```
+
+The `MANDATE_API_URL` defaults to `https://app.mandate.md` in `wrangler.toml`. Override it if you run a self-hosted Mandate instance.
+
+## Local development
+
+```bash
+cd packages/mcp-server
+bun install
+bun run dev
+```
+
+This starts the MCP server on `http://localhost:8787`. The SSE endpoint is at `/sse` and the MCP endpoint is at `/mcp`.
+
+## Environment variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MANDATE_RUNTIME_KEY` | Yes | - | Mandate runtime key. Set via `wrangler secret put`. |
+| `MANDATE_API_URL` | No | `https://app.mandate.md` | Mandate API base URL. |
+
+## Client configuration
+
+### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "mandate": {
+      "url": "https://your-worker.workers.dev/sse"
+    }
+  }
+}
+```
+
+### Codex CLI
+
+```toml
+[mcp.mandate]
+transport = "sse"
+url = "https://your-worker.workers.dev/sse"
+```
+
+### Cursor / Windsurf
+
+Add the SSE URL in your editor's MCP settings. The server uses standard SSE transport, so any MCP-compatible editor works.
+
+## Testing with MCP Inspector
+
+Use the [MCP Inspector](https://github.com/anthropic/mcp-inspector) to test your deployed server interactively.
+
+```bash
+bunx @anthropic-ai/mcp-inspector
+```
+
+Enter your Worker URL (e.g., `https://your-worker.workers.dev/sse`) and test the `search` and `execute` tools directly.
+
+## Alternative: CLI MCP mode
+
+If you do not need a Cloudflare Workers deployment, the Mandate CLI includes a built-in MCP server that runs locally via stdio transport.
+
+```bash
+npx @mandate.md/cli --mcp
+```
+
+This exposes the same tools (`search`, `execute`) over stdio. Use it for local development or when your MCP client supports stdio but not SSE.
+
+<Note>
+  The Workers MCP server does not store any state. Every `execute` call is a stateless API request to the Mandate backend. Your runtime key is stored as a Cloudflare secret and never exposed to clients.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CLI MCP Flag" icon="terminal" href="/cli/mcp-flag">
+    Run Mandate MCP locally with the CLI's --mcp flag.
+  </Card>
+  <Card title="Integrations Overview" icon="grid-2" href="/integrations/overview">
+    Compare all Mandate integration options.
+  </Card>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Understand the validate flow that the execute tool calls.
+  </Card>
+</CardGroup>

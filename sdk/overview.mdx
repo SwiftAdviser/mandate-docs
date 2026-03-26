@@ -1,0 +1,95 @@
+---
+title: "SDK Overview"
+sidebarTitle: "Overview"
+description: "Install the Mandate TypeScript SDK and start validating agent transactions with MandateClient and MandateWallet."
+---
+
+import InstallSdk from "/snippets/install-sdk.mdx";
+
+## What is the Mandate SDK?
+
+The `@mandate/sdk` package is a TypeScript SDK for the Mandate policy layer. It provides two main classes: `MandateClient` for low-level API calls, and `MandateWallet` for a high-level flow that validates, signs, broadcasts, and confirms transactions in one call. The SDK throws typed errors for every failure mode, so your agent can react to policy blocks, approval requests, and circuit breaker trips.
+
+## Installation
+
+<InstallSdk />
+
+## Quick start
+
+Create a `MandateClient` and validate a transaction against your policies.
+
+```typescript
+import { MandateClient, PolicyBlockedError } from '@mandate/sdk';
+
+const client = new MandateClient({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+});
+
+try {
+  const result = await client.validate({
+    action: 'transfer',
+    amount: '50',
+    to: '0xRecipientAddress',
+    token: 'USDC',
+    reason: 'Payment for API access',
+  });
+
+  console.log('Intent ID:', result.intentId);
+  console.log('Allowed:', result.allowed);
+} catch (err) {
+  if (err instanceof PolicyBlockedError) {
+    console.log('Blocked:', err.blockReason);
+  }
+}
+```
+
+The `validate()` method sends an action-based request to the Mandate API. If the transaction passes all 14 policy checks, you get back a `PreflightResult` with `allowed: true` and an `intentId`. If it fails, the SDK throws a typed error with the specific block reason.
+
+## Exports
+
+The SDK exposes the following from its main entry point.
+
+| Export | Description |
+|--------|------------|
+| `MandateClient` | Low-level API wrapper for validate, register, and status polling |
+| `MandateWallet` | High-level: validate, sign, broadcast, confirm in one call |
+| `MandateGuard` | Alias for `MandateWallet` |
+| `computeIntentHash` | keccak256 of canonical tx string for raw validation |
+| `PolicyBlockedError` | Transaction blocked by policy (spend limit, allowlist, schedule) |
+| `MandateBlockedError` | Alias for `PolicyBlockedError` |
+| `CircuitBreakerError` | Agent emergency-stopped via circuit breaker |
+| `ApprovalRequiredError` | Human approval needed before the transaction can proceed |
+| `RiskBlockedError` | Risk scanner blocked the transaction |
+| `MandateError` | Base error class for all Mandate errors |
+| `USDC` | USDC contract addresses per chain |
+| `CHAIN_ID` | Chain ID constants (mainnet + testnet) |
+
+## Sub-path import
+
+If you only need `MandateClient` and want a smaller bundle, import from the `/client` sub-path. This skips the viem dependency that `MandateWallet` requires.
+
+```typescript
+import { MandateClient } from '@mandate/sdk/client';
+```
+
+<Tip>
+Use the sub-path import when your agent framework already handles signing and broadcasting. You get the same `validate()`, `register()`, and `status()` methods without pulling in viem.
+</Tip>
+
+## How does the SDK handle errors?
+
+Every failure mode has a dedicated error class. Your agent catches `PolicyBlockedError` for policy violations, `ApprovalRequiredError` when human review is needed, `CircuitBreakerError` when the agent is emergency-stopped, and `RiskBlockedError` when the risk scanner flags the transaction. All extend `MandateError`, so you can catch the base class as a fallback. See [Error Handling](/sdk/errors) for patterns and examples.
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="MandateClient" icon="arrow-right" href="/sdk/mandate-client">
+    Low-level API methods: validate, register, poll status.
+  </Card>
+  <Card title="MandateWallet" icon="arrow-right" href="/sdk/mandate-wallet">
+    High-level signing and broadcast flow with viem.
+  </Card>
+  <Card title="Error Handling" icon="arrow-right" href="/sdk/errors">
+    Typed error classes and recommended catch patterns.
+  </Card>
+</CardGroup>

@@ -1,0 +1,53 @@
+---
+title: "Agent Reputation (ERC-8004)"
+sidebarTitle: "Reputation"
+description: "On-chain agent reputation scoring via ERC-8004 and how it affects transaction approval."
+---
+
+**ERC-8004** is an emerging standard for on-chain agent reputation scoring. It provides a decentralized way to verify that an AI agent has a track record of legitimate behavior. Mandate integrates with ERC-8004 to add reputation-based checks to the policy engine.
+
+## How does reputation scoring work?
+
+The ReputationService queries The Graph for the agent's on-chain identity during transaction validation. The service looks up the agent's wallet address in the ERC-8004 registry and retrieves its reputation score.
+
+Three outcomes are possible:
+
+- **Registered with positive reputation.** The transaction proceeds through normal policy evaluation. No additional checks.
+- **Registered with low reputation.** The transaction triggers an approval requirement. The agent owner must manually approve before the transaction executes.
+- **Not registered.** The agent is flagged as `unknown_agent`. This is an approval trigger, not a block. Unregistered agents can still transact, but high-value transactions require human approval.
+
+## What are the reputation thresholds?
+
+Mandate maps ERC-8004 scores to three tiers:
+
+| Tier | Score Range | Effect |
+|------|-------------|--------|
+| Good | Above threshold | Normal policy evaluation |
+| Low | Below threshold | Approval required for transactions above policy minimum |
+| Critical | Below critical threshold | Transaction blocked with `reputation_critical` reason |
+
+The exact threshold values are configured per-policy. The defaults work for most use cases, but high-security deployments can raise them.
+
+## How do you register an agent on-chain?
+
+Register your agent's wallet address following the ERC-8004 specification. The registration records the agent's identity, owner, and initial reputation on-chain. Once registered, the agent's reputation score builds over time based on transaction history.
+
+Registration is optional. Unregistered agents work with Mandate, but they trigger approval requirements for transactions that a registered agent would execute automatically. For agents handling large volumes or high-value transactions, registration reduces friction significantly.
+
+## Does reputation affect all transaction types?
+
+Reputation checks run during policy evaluation alongside spend limits, allowlists, and other rules. The reputation result is one input to the policy decision, not the only one. A registered agent with good reputation still needs to pass spend limits and allowlist checks.
+
+Reputation data is cached for 5 minutes to avoid excessive subgraph queries. The cache is per-agent, so a reputation change takes at most 5 minutes to affect transaction validation.
+
+<CardGroup cols={3}>
+  <Card title="Threat Model" icon="shield" href="/security/threat-model">
+    Full security overview
+  </Card>
+  <Card title="Approval Triggers" icon="bell" href="/reference/approval-triggers">
+    All conditions that require human approval
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    How reputation fits in the validation pipeline
+  </Card>
+</CardGroup>

@@ -1,0 +1,93 @@
+---
+title: "Integrations Overview"
+sidebarTitle: "Overview"
+description: "Choose the right Mandate integration for your agent: hook-based plugins, framework SDKs, CLI, or direct REST API calls."
+---
+
+## How to integrate Mandate
+
+Mandate supports three integration patterns. Each one enforces the same policy checks (spend limits, allowlists, approval workflows, reason scanning) but differs in how your agent connects.
+
+### Hook-based (zero code changes)
+
+Hooks intercept financial tool calls automatically. Your agent does not need to call `validate()` explicitly. The plugin watches for transaction-related commands and blocks them until Mandate approves.
+
+Two plugins use this pattern:
+
+- **[Claude Code Plugin](/integrations/claude-code)**: Installs as a Claude Code plugin. PreToolUse hook blocks Bash commands and MCP tools that contain wallet keywords. PostToolUse hook records validation tokens. Two-phase, fail-closed, no network calls in the gate.
+- **[OpenClaw Plugin](/integrations/openclaw)**: Installs via `openclaw plugin install`. Registers a `message:preprocessed` hook that intercepts financial tool calls (Locus, Bankr, Sponge, any swap/transfer/send) even if the agent skips `mandate_validate`.
+
+Hook-based integrations are the strongest enforcement model. The agent cannot bypass the policy layer because the platform itself gates execution.
+
+### SDK-based (explicit calls)
+
+Your agent calls `validate()` before every transaction. You add the Mandate SDK or a framework-specific plugin to your code and invoke it at the right moment. This works with any wallet.
+
+Available SDK integrations:
+
+- **[TypeScript SDK](/sdk/overview)**: `MandateClient` for validation, `MandateWallet` for the full validate-sign-broadcast flow.
+- **[GOAT Plugin](/integrations/goat-sdk)**: `@Tool()` decorator pattern. Transfer and x402 payment actions with built-in validation.
+- **[AgentKit Provider](/integrations/agentkit)**: Coinbase AgentKit `WalletProvider` and `ActionProvider` that wrap Mandate validation.
+- **[ElizaOS Plugin](/integrations/elizaos)**: Three actions (register, validate, transfer) plus a wallet provider for the ElizaOS runtime.
+- **[GAME Plugin](/integrations/game-virtuals)**: Worker functions for the Virtuals Protocol GAME SDK. Available in TypeScript and Python.
+- **[ACP Plugin](/integrations/acp-virtuals)**: Job payment client for the Agent Commerce Protocol by Virtuals.
+
+SDK-based integrations give you full control over when and how validation happens. The trade-off: your code must call validate before every transaction. If you forget, no safety net exists unless you also use a hook.
+
+### API-direct (any language)
+
+Call the Mandate REST API from any programming language. No SDK required. Send HTTP requests to `https://app.mandate.md/api/validate` with your runtime key and transaction details.
+
+- **[REST API](/api-reference/overview)**: Direct HTTP calls. Works with Python, Go, Rust, Java, or anything that speaks HTTP.
+- **[CLI](/cli/overview)**: `npx @mandate/cli` for shell scripts and automation. Also supports [MCP server mode](/cli/mcp-flag) for tool-based platforms.
+- **[MCP Server](/integrations/mcp-server)**: Cloudflare Workers deployment that exposes search and execute tools over the MCP protocol.
+
+API-direct is the most flexible option. You handle authentication, error handling, and retry logic yourself.
+
+## Comparison matrix
+
+| Integration | Type | Setup | Languages | Key features |
+|---|---|---|---|---|
+| [Claude Code Plugin](/integrations/claude-code) | Hook | `claude plugin install` | Any (via Claude) | Auto-intercept, two-phase gate, session scan |
+| [OpenClaw Plugin](/integrations/openclaw) | Hook | `openclaw plugin install` | Any (via OpenClaw) | 3 tools, safety-net hook, auto-key storage |
+| [TypeScript SDK](/sdk/overview) | SDK | `npm install @mandate/sdk` | TypeScript/JS | MandateClient + MandateWallet, full control |
+| [CLI](/cli/overview) | CLI | `npx @mandate/cli` | Any (shell) | All operations, MCP server mode |
+| [GOAT Plugin](/integrations/goat-sdk) | SDK | `npm install` | TypeScript | @Tool() pattern, transfer + x402 |
+| [AgentKit Provider](/integrations/agentkit) | SDK | `npm install` | TypeScript | WalletProvider + ActionProvider |
+| [ElizaOS Plugin](/integrations/elizaos) | SDK | `npm install` | TypeScript | 3 actions + wallet provider |
+| [GAME Plugin](/integrations/game-virtuals) | SDK | `npm install` / `pip install` | TS + Python | Worker functions |
+| [ACP Plugin](/integrations/acp-virtuals) | SDK | `npm install` | TypeScript | Job payment client |
+| [MCP Server](/integrations/mcp-server) | API | `wrangler deploy` | Any (MCP) | search + execute tools |
+| [REST API](/api-reference/overview) | API | None | Any | Direct HTTP calls |
+
+## Which integration should you use?
+
+Start here and follow the path that matches your setup:
+
+1. **Using Claude Code?** Install the [Claude Code Plugin](/integrations/claude-code). Zero code changes, automatic enforcement.
+2. **Using OpenClaw?** Install the [OpenClaw Plugin](/integrations/openclaw). Three tools register automatically, safety-net hook included.
+3. **Using a supported framework?** Pick the matching plugin: [GOAT](/integrations/goat-sdk), [AgentKit](/integrations/agentkit), [ElizaOS](/integrations/elizaos), [GAME](/integrations/game-virtuals), or [ACP](/integrations/acp-virtuals).
+4. **Building a custom TypeScript agent?** Use the [TypeScript SDK](/sdk/overview). `MandateClient` for validation only, `MandateWallet` for the full flow.
+5. **Need shell automation?** Use the [CLI](/cli/overview). Works in scripts, CI/CD pipelines, and as an MCP server.
+6. **Using another language (Python, Go, Rust)?** Call the [REST API](/api-reference/overview) directly. No SDK needed.
+
+<Tip>
+When possible, combine a hook-based plugin with an SDK integration. The hook acts as a safety net: even if your code misses a validate call, the hook catches it. This is the strongest enforcement model available.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Claude Code Plugin" icon="terminal" href="/integrations/claude-code">
+    Two-phase enforcement for Claude Code agents. Zero code changes.
+  </Card>
+  <Card title="OpenClaw Plugin" icon="shield-halved" href="/integrations/openclaw">
+    Three Mandate tools plus a safety-net hook for OpenClaw agents.
+  </Card>
+  <Card title="TypeScript SDK" icon="code" href="/sdk/overview">
+    MandateClient and MandateWallet for full programmatic control.
+  </Card>
+  <Card title="REST API" icon="globe" href="/api-reference/overview">
+    Direct HTTP calls from any language. No SDK required.
+  </Card>
+</CardGroup>

@@ -1,0 +1,151 @@
+---
+title: "Claude Code Plugin"
+sidebarTitle: "Claude Code"
+description: "Install the Mandate Claude Code plugin for two-phase transaction enforcement: automatic blocking of unvalidated wallet calls with zero code changes."
+---
+
+## What is it?
+
+The Mandate Claude Code plugin (`claude-mandate-plugin`) enforces spend limits on every transaction Claude executes. It uses a two-phase approach: PostToolUse records validation tokens when the agent validates with Mandate, and PreToolUse blocks transaction commands that lack a valid token. Fail-closed, no network calls in the gate.
+
+The plugin does not manage wallets. It gates the execution of transaction commands regardless of which wallet Claude uses: Bankr, Locus, Sponge, direct RPC calls, or MCP wallet tools.
+
+## Install
+
+```bash
+claude plugin install claude-mandate-plugin
+```
+
+The plugin activates immediately. No configuration files, no environment variables.
+
+## How the two-phase gate works
+
+The plugin registers three hooks: SessionStart, PostToolUse, and PreToolUse.
+
+### Phase 1: PostToolUse (record validation tokens)
+
+When Claude calls `mandate validate` (via CLI or API), the PostToolUse hook detects the successful validation and writes a token to a local state file. The token includes a timestamp and the validation result.
+
+### Phase 2: PreToolUse (block unvalidated transactions)
+
+When Claude tries to execute a Bash command or MCP tool that looks like a transaction, the PreToolUse hook checks for a valid token. If no token exists or the token is older than 15 minutes, the hook returns a deny message with instructions to validate first.
+
+**This is the enforcement boundary.** Claude sees the block message and cannot proceed until it validates with Mandate. The gate runs entirely offline: no API calls, no network dependencies, purely a local file check.
+
+```
+MANDATE POLICY GATE: Transaction blocked. You must validate with Mandate first.
+
+Validate (recommended):
+  mandate validate --action "swap" --reason "<why>" --amount "50" --to "0xAddr"
+
+After validation succeeds (allowed: true), retry this tool call.
+```
+
+## What triggers the gate?
+
+The PreToolUse hook matches two categories of tool calls:
+
+### MCP financial tools
+Any MCP tool name containing transaction keywords is intercepted: `transfer`, `send`, `pay`, `swap`, `trade`, `sell`, `buy`, `exchange`, `submit`, `sign_tx`, `broadcast`, `withdraw`, `deposit`, `bridge`, `execute`, `approve_tx`. MCP read tools (`get_`, `list_`, `balance`, `read_`, `fetch_`, `query_`, `search_`, `describe_`) are allowed through.
+
+### Bash commands
+Bash commands are checked for wallet CLI calls and transaction patterns:
+- **Bankr CLI**: `bankr prompt` (with write keywords), `bankr submit`, `bankr sign`
+- **Bankr API**: URLs matching `api.bankr.bot/agent/prompt`, `agent/submit`, `agent/sign`
+- **Generic pattern**: Transaction keywords (`transfer`, `send`, `swap`, etc.) combined with an Ethereum address (`0x` + 40 hex chars)
+
+Commands that match Mandate's own CLI (`mandate validate`, `mandate login`, etc.) are always allowed through.
+
+<Note>
+The hook uses keyword matching, not semantic analysis. A Bash command like `echo "send 0xabc..."` would trigger the gate even though it is not a real transaction. This is by design: false positives are safe, false negatives are not.
+</Note>
+
+## Auto-scan on session start
+
+The SessionStart hook scans the project codebase for unprotected wallet calls every time Claude starts a new session. It searches JavaScript and TypeScript files for patterns like `wallet.transfer()`, `sendTransaction()`, `writeContract()`, and checks whether Mandate SDK imports or this plugin protect them.
+
+If unprotected calls are found, the scan prints a summary:
+
+```
+  Mandate Scan
+
+  3 unprotected wallet call(s) found in 47 files:
+
+    src/agent.ts:42  wallet.sendTransaction({
+    src/swap.ts:18   executeAction("swap",
+    lib/pay.ts:9     walletClient.write(
+
+  Run: mandate validate --action <action> --reason <why> before each transaction.
+```
+
+If Mandate SDK is a dependency in `package.json` or the plugin is installed, all calls are considered protected at the project level.
+
+## Registration
+
+Register your agent with the CLI. This creates an agent identity and stores credentials locally.
+
+```bash
+npx @mandate/cli login --name "claude-agent" --address 0xYourWalletAddress
+```
+
+Credentials are saved to `~/.mandate/credentials.json` (chmod 600). The CLI reads the runtime key from this file automatically on subsequent calls.
+
+Share the `claimUrl` from the output with the wallet owner. They link the agent to their Mandate dashboard to configure policies.
+
+## Example flow
+
+Here is what a typical transaction looks like with the plugin active:
+
+1. **Claude decides to send funds.** "I need to send 50 USDC to 0xRecipientAddress for the March invoice."
+
+2. **Claude validates with Mandate.**
+   ```bash
+   mandate validate --action "transfer" --amount "50" --to "0xRecipientAddress" --token "USDC" --reason "March invoice payment to vendor"
+   ```
+   The policy engine checks spend limits, allowlists, schedule, and scans the reason for prompt injection. Returns `allowed: true`.
+
+3. **PostToolUse records the token.** The plugin writes a validation token to the local state file.
+
+4. **Claude executes the transaction.**
+   ```bash
+   bankr prompt "Send 50 USDC to 0xRecipientAddress"
+   ```
+   The PreToolUse hook fires, finds a valid token (less than 15 minutes old), and allows the command.
+
+5. **Transaction completes.** Claude reports the result to the user.
+
+**If the policy blocks the transaction:**
+
+```
+mandate validate --action "transfer" --amount "500" --reason "Large payment"
+# Response: { "allowed": false, "blockReason": "per_tx_limit_exceeded" }
+```
+
+Claude sees the block reason and reports to the user: "This transaction exceeds your $100 per-transaction limit. Adjust the limit in the Mandate dashboard if you want to allow it."
+
+<Warning>
+Tokens expire after 15 minutes. If Claude validates a transaction but waits too long to execute, the gate blocks the command and requires a fresh validation. This prevents stale approvals from being used.
+</Warning>
+
+## Mandate's own tools are always allowed
+
+The gate never blocks Mandate's own commands: `mandate validate`, `mandate login`, `mandate status`, `mandate event`, `mandate activate`, `mandate approve`, `mandate --llms`. These must pass through for the validation flow to work.
+
+Similarly, Mandate MCP tools (`mcp__mandate__validate`, `mcp__mandate__register`, etc.) are always allowed.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Integrations Overview" icon="grid-2" href="/integrations/overview">
+    Compare all integration methods and find the right one for your stack.
+  </Card>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Full guide to the validate endpoint, parameters, and response handling.
+  </Card>
+  <Card title="Codebase Scanner" icon="magnifying-glass" href="/guides/codebase-scanner">
+    Run the scanner in CI/CD to catch unprotected wallet calls before deployment.
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/overview">
+    All CLI commands: login, validate, transfer, scan, and MCP server mode.
+  </Card>
+</CardGroup>

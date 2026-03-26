@@ -1,0 +1,118 @@
+---
+title: "Block Reasons"
+sidebarTitle: "Block Reasons"
+description: "Complete reference for all blockReason values returned by the Mandate policy engine, with HTTP status codes, causes, and resolution steps."
+---
+
+## What is a block reason?
+
+When the Mandate policy engine rejects a transaction, the response includes a `blockReason` field. This machine-readable string tells you exactly which check failed. The response also includes a human-readable `blockDetail` explaining the specifics and a `declineMessage` designed to counter prompt injection attempts.
+
+Every blocked response follows this format:
+
+```json
+{
+  "allowed": false,
+  "blockReason": "per_tx_limit_exceeded",
+  "blockDetail": "$500.00 exceeds $100/tx limit",
+  "declineMessage": "This transaction exceeds your per-transaction limit of $100."
+}
+```
+
+The `declineMessage` is an adversarial counter-message. When an agent receives a block, it should display this message to override any manipulative prompt that triggered the transaction attempt.
+
+## Block reason reference
+
+The policy engine runs 14 sequential checks. The first failure wins: later checks are skipped. Block reasons appear in the order the engine evaluates them.
+
+### Security blocks
+
+These blocks indicate a security condition that prevents any policy evaluation.
+
+| blockReason | HTTP | Cause | Resolution |
+|-------------|------|-------|------------|
+| `circuit_breaker_active` | 403 | Agent is emergency-stopped. Either manually tripped by the owner or auto-tripped by an envelope verification mismatch. | Owner resets the circuit breaker via the dashboard. Investigate the cause before resetting. See [Circuit Breaker](/security/circuit-breaker). |
+| `no_active_policy` | 422 | No active policy is configured for this agent. Every agent needs at least one policy before it can validate transactions. | Create a policy in the [Policy Builder](/dashboard/policy-builder). New agents get a default policy after claiming. |
+
+### Schedule and allowlist blocks
+
+These blocks enforce when and where agents can transact.
+
+| blockReason | HTTP | Cause | Resolution |
+|-------------|------|-------|------------|
+| `outside_schedule` | 422 | Transaction attempted outside the allowed time window. The policy restricts operations to specific days of the week or hours of the day. | Wait for the next allowed window, or update the schedule in the [Policy Builder](/dashboard/policy-builder). |
+| `address_not_allowed` | 422 | Destination address is not in the policy's allowlist. When `allowed_addresses` or `allowed_contracts` is configured, only listed addresses are permitted. | Add the address to the allowlist in the [Policy Builder](/dashboard/policy-builder). |
+| `action_blocked` | 422 | The action type (e.g., "swap", "bridge") is in the policy's `blocked_actions` list. | Remove the action from `blocked_actions` in the [Policy Builder](/dashboard/policy-builder), or use a different action type. |
+
+### Spend limit blocks
+
+These blocks enforce USD-denominated spending caps.
+
+| blockReason | HTTP | Cause | Resolution |
+|-------------|------|-------|------------|
+| `per_tx_limit_exceeded` | 422 | Single transaction amount exceeds the `spend_limit_per_tx_usd` policy cap. Default: $100. | Reduce the transaction amount, or increase `spend_limit_per_tx_usd` in the policy. |
+| `daily_quota_exceeded` | 422 | Agent's cumulative spend for the current day (UTC) has exhausted the `spend_limit_per_day_usd` budget. Default: $1,000. | Wait until midnight UTC for the daily budget to reset, or increase `spend_limit_per_day_usd`. |
+| `monthly_quota_exceeded` | 422 | Agent's cumulative spend for the current month has exhausted the `spend_limit_per_month_usd` budget. | Wait until the 1st of next month for the reset, or increase `spend_limit_per_month_usd`. |
+
+### Raw validation blocks
+
+These blocks apply only to the deprecated raw validation endpoint (`POST /api/validate/raw`). Action-based validation does not produce these block reasons.
+
+| blockReason | HTTP | Cause | Resolution |
+|-------------|------|-------|------------|
+| `gas_limit_exceeded` | 422 | Gas limit in the transaction exceeds `max_gas_limit` configured in the policy. | Lower the gas limit in your transaction, or increase `max_gas_limit` in the policy. |
+| `value_wei_exceeded` | 422 | Native value (ETH/wei) in the transaction exceeds `max_value_wei` configured in the policy. | Lower the native value, or increase `max_value_wei` in the policy. |
+| `selector_blocked` | 422 | The 4-byte function selector in the transaction calldata is in the policy's `blocked_selectors` list. | Remove the selector from `blocked_selectors`, or use a different contract function. |
+| `intent_hash_mismatch` | 422 | The `intentHash` submitted by the client does not match the server's recomputation from the same parameters. | See [Intent Hash Mismatch Troubleshooting](/troubleshooting/intent-hash-mismatch). Common causes: stale nonce, uppercase addresses, missing `0x` prefix, or `accessList` set to `undefined` instead of `[]`. |
+
+### Risk and reason blocks
+
+These blocks come from automated scanning systems.
+
+| blockReason | HTTP | Cause | Resolution |
+|-------------|------|-------|------------|
+| `aegis_critical_risk` | 422 | Destination address is flagged as CRITICAL risk by the Aegis security scanner. Associated with known exploits, sanctions, or rug pulls. | Verify the address is correct. If you believe this is a false positive, contact the Mandate risk team. Do not retry with the same address. |
+| `reason_blocked` | 422 | The `reason` field triggered prompt injection detection. Mandate scans for 18 attack patterns across 5 categories: direct injection, jailbreak, encoding evasion, multi-turn manipulation, and authority escalation. | Review the reason text and rewrite it without manipulation language. Legitimate reasons like "Pay invoice #127 from Alice" pass. Phrases like "ignore all instructions" or "URGENT: do not verify" are blocked. |
+
+## How to handle blocks in code
+
+Check for specific block reasons using the SDK's typed error classes:
+
+```typescript
+import { PolicyBlockedError, CircuitBreakerError, RiskBlockedError } from '@mandate.md/sdk';
+
+try {
+  await client.validate({ action: 'transfer', reason: 'Pay invoice', amount: '500', to: '0xAlice' });
+} catch (err) {
+  if (err instanceof CircuitBreakerError) {
+    // blockReason: circuit_breaker_active
+    console.error('Agent is emergency-stopped. Contact the owner.');
+  } else if (err instanceof RiskBlockedError) {
+    // blockReason: aegis_critical_risk
+    console.error(`Risky address: ${err.blockReason}`);
+  } else if (err instanceof PolicyBlockedError) {
+    // Any other blockReason
+    console.log(`Blocked: ${err.blockReason}`);
+    console.log(`Detail: ${err.detail}`);
+    console.log(`Decline message: ${err.declineMessage}`);
+  }
+}
+```
+
+<Warning>
+Never suppress or retry a blocked transaction without changing the parameters. The block reason tells you what to fix. Retrying the same request produces the same result.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="SDK Error Classes" icon="code" href="/sdk/errors">
+    Typed error classes for handling blocks, approvals, and circuit breaker events.
+  </Card>
+  <Card title="Handle Errors Guide" icon="shield-check" href="/guides/handle-errors">
+    Production-ready error handling patterns for agent developers.
+  </Card>
+  <Card title="Common Errors" icon="circle-exclamation" href="/troubleshooting/common-errors">
+    Step-by-step solutions for the most frequent Mandate errors.
+  </Card>
+</CardGroup>

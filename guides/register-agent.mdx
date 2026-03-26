@@ -1,0 +1,154 @@
+---
+title: "Register an Agent"
+sidebarTitle: "Register Agent"
+description: "Create an agent identity with Mandate, get a runtime key for API authentication, and link the agent to a wallet owner's dashboard."
+---
+
+import InstallSdk from "/snippets/install-sdk.mdx";
+import InstallCli from "/snippets/install-cli.mdx";
+
+## What is agent registration?
+
+Agent registration creates a new identity in Mandate and returns two credentials: a `runtimeKey` for API authentication and a `claimUrl` for the wallet owner. The runtime key is a bearer token (prefixed `mndt_test_` or `mndt_live_`) that your agent includes in every subsequent API call. The claim URL is a one-time link the wallet owner visits to connect the agent to their dashboard, where they configure policies, approve transactions, and view the audit log.
+
+Registration is the only unauthenticated endpoint in the Mandate API. Every other operation requires the runtime key. You run registration once per agent, store the key securely, and share the claim URL with the person who controls the wallet. No private keys are involved at any point in this process.
+
+## How do you register an agent?
+
+Use the SDK, CLI, or raw HTTP. All three methods hit the same `POST /api/agents/register` endpoint and return the same response.
+
+<CodeGroup>
+  ```typescript TypeScript
+  import { MandateClient } from '@mandate/sdk';
+
+  const { agentId, runtimeKey, claimUrl, evmAddress } = await MandateClient.register({
+    name: 'my-trading-agent',
+    evmAddress: '0xYourAgentWalletAddress' as `0x${string}`,
+    chainId: 84532,
+    defaultPolicy: {
+      spendLimitPerTxUsd: 100,
+      spendLimitPerDayUsd: 1000,
+    },
+  });
+
+  console.log('Agent ID:', agentId);
+  console.log('Runtime key:', runtimeKey);  // Save securely
+  console.log('Claim URL:', claimUrl);      // Share with wallet owner
+  ```
+
+  ```bash CLI
+  npx @mandate/cli login \
+    --name "my-trading-agent" \
+    --address 0xYourAgentWalletAddress \
+    --chainId 84532 \
+    --perTxLimit 100 \
+    --dailyLimit 1000
+  ```
+
+  ```bash curl
+  curl -X POST https://app.mandate.md/api/agents/register \
+    -H "Content-Type: application/json" \
+    -d '{
+      "name": "my-trading-agent",
+      "evmAddress": "0xYourAgentWalletAddress",
+      "chainId": 84532,
+      "defaultPolicy": {
+        "spendLimitPerTxUsd": 100,
+        "spendLimitPerDayUsd": 1000
+      }
+    }'
+  ```
+</CodeGroup>
+
+### Registration parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `name` | `string` | Yes | Human-readable agent name, displayed in the dashboard |
+| `evmAddress` | `0x${string}` | Yes | The agent's wallet address on the target chain |
+| `chainId` | `number` | Yes | Target chain ID (e.g. `84532` for Base Sepolia) |
+| `defaultPolicy` | `object` | No | Initial spend limits in USD |
+
+### Response
+
+```json
+{
+  "agentId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "runtimeKey": "mndt_test_abc12...xyz",
+  "claimUrl": "https://app.mandate.md/claim/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "evmAddress": "0xYourAgentWalletAddress",
+  "chainId": 84532
+}
+```
+
+## How should you store credentials?
+
+The runtime key is the only secret your agent needs. Treat it like a database password.
+
+**SDK and curl users**: save the key to a `.env` file with restricted permissions.
+
+```bash
+echo "MANDATE_RUNTIME_KEY=mndt_test_abc12...xyz" >> .env
+chmod 600 .env
+```
+
+**CLI users**: the `login` command writes credentials automatically to `~/.mandate/credentials.json` with `0600` permissions. All subsequent CLI commands read this file.
+
+<Warning>
+Never commit the runtime key to version control. Add `.env` and `~/.mandate/` to your `.gitignore`. If a key is exposed, regenerate it immediately from the [dashboard](/dashboard/agents) or via the `POST /api/agents/{agentId}/regenerate-key` endpoint.
+</Warning>
+
+## How does the wallet owner claim the agent?
+
+The `claimUrl` is a one-time link. Share it with the person who owns the wallet. When they visit the URL:
+
+1. They sign in with GitHub (or their existing dashboard account).
+2. The agent appears in their [Agents](/dashboard/agents) page.
+3. They can configure policies, set approval thresholds, and view the audit log.
+
+Until the agent is claimed, it operates under the default policy you set during registration. The wallet owner can tighten or relax these limits at any time after claiming.
+
+<Note>
+Claiming is not required for the agent to function. An unclaimed agent validates transactions normally using the default policy. Claiming gives the wallet owner visibility and control.
+</Note>
+
+## What is the default policy?
+
+Every new agent starts with a default policy. If you do not specify `defaultPolicy` during registration, these values apply:
+
+| Rule | Default value |
+|------|--------------|
+| Per-transaction limit | $100 USD |
+| Daily limit | $1,000 USD |
+| Monthly limit | None |
+| Address restrictions | None (any recipient allowed) |
+| Approval required | No |
+| Schedule | 24/7 |
+| Circuit breaker | Off |
+
+These defaults let you start testing immediately on Base Sepolia. Before moving to production, the wallet owner should customize the policy in the [Policy Builder](/dashboard/policy-builder): add address allowlists, lower spend limits, enable approval workflows, or restrict operating hours.
+
+## What happens after registration?
+
+With the runtime key stored, your agent is ready to validate transactions. The typical next step is calling `client.validate()` before every transaction to check it against the policy engine's 14 sequential rules. If validation passes, the agent signs locally and broadcasts. If it fails, the agent receives a typed error with a specific block reason.
+
+<Tip>
+Test the full flow on Base Sepolia before deploying to mainnet. Get testnet ETH from the [Coinbase faucet](https://portal.cdp.coinbase.com/products/faucet) and USDC from the [Circle faucet](https://faucet.circle.com/).
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Check every transaction against the policy engine before signing.
+  </Card>
+  <Card title="Policy Builder" icon="sliders" href="/dashboard/policy-builder">
+    Configure spend limits, allowlists, and approval thresholds in the dashboard.
+  </Card>
+  <Card title="CLI Login Reference" icon="terminal" href="/cli/login">
+    Full flag reference for the login command.
+  </Card>
+  <Card title="Credential Management" icon="key" href="/security/credential-management">
+    Best practices for storing, rotating, and revoking runtime keys.
+  </Card>
+</CardGroup>

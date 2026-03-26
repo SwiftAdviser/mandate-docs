@@ -1,0 +1,93 @@
+---
+title: "GOAT SDK Plugin"
+sidebarTitle: "GOAT SDK"
+description: "Add Mandate policy enforcement to your GOAT SDK agent with the @mandate.md/goat-plugin package."
+---
+
+## What is the GOAT SDK plugin?
+
+The `@mandate.md/goat-plugin` package wraps Mandate's policy engine as a GOAT SDK plugin. It exposes two tools: `mandate_transfer` for ERC20 transfers and `mandate_x402_pay` for x402 payment flows. Every tool call validates against your Mandate spending policies before signing or broadcasting.
+
+The plugin extends `PluginBase<EVMWalletClient>` and works with any EVM chain supported by GOAT.
+
+## Installation
+
+```bash
+bun add @mandate.md/goat-plugin @goat-sdk/core
+```
+
+`@goat-sdk/core` is a peer dependency (>=0.3.0). Install it alongside the plugin.
+
+## Usage
+
+```typescript
+import { mandate } from '@mandate.md/goat-plugin';
+import { createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
+
+const walletClient = createWalletClient({
+  account: privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`),
+  chain: baseSepolia,
+  transport: http(),
+});
+
+const mandatePlugin = mandate({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  privateKey: process.env.PRIVATE_KEY! as `0x${string}`,
+  chainId: 84532,
+  rpcUrl: 'https://sepolia.base.org',
+});
+```
+
+Pass the plugin to your GOAT agent's plugin list. The agent can now call `mandate_transfer` and `mandate_x402_pay` as tools.
+
+## Tools
+
+| Tool | Description |
+|------|-------------|
+| `mandate_transfer` | Transfer ERC20 tokens with policy enforcement. Accepts `to`, `amount`, `tokenAddress`, and optional `waitForConfirmation`. |
+| `mandate_x402_pay` | Pay for an x402-gated resource. Accepts `url` and optional `headers`. |
+
+Both tools create a `MandateWallet` internally, validate the transaction against the Mandate API, sign locally, and broadcast. Your private key never leaves the process.
+
+## Configuration
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `runtimeKey` | `string` | Yes | Mandate runtime key (`mndt_live_...` or `mndt_test_...`) |
+| `privateKey` | `` `0x${string}` `` | Yes | Agent wallet private key (hex, with `0x` prefix) |
+| `chainId` | `number` | No | EVM chain ID. Defaults to `84532` (Base Sepolia). |
+| `rpcUrl` | `string` | No | RPC endpoint URL. Defaults to the chain's public RPC. |
+
+## Error handling
+
+The plugin throws plain `Error` objects with descriptive messages. This matches GOAT SDK conventions where tool errors surface as strings to the LLM.
+
+```typescript
+// Policy block:
+// "Transfer blocked by Mandate policy: daily_limit_exceeded"
+
+// Approval required:
+// "Transfer requires approval. IntentId: int_abc123"
+```
+
+If your agent needs structured error handling, use the `@mandate.md/sdk` directly. The SDK throws typed errors: `PolicyBlockedError`, `ApprovalRequiredError`, and `CircuitBreakerError`.
+
+<Warning>
+  Store `runtimeKey` and `privateKey` in environment variables. Never hardcode credentials in source files.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Integrations Overview" icon="grid-2" href="/integrations/overview">
+    Compare all supported agent frameworks and choose the right one.
+  </Card>
+  <Card title="MandateWallet" icon="wallet" href="/sdk/mandate-wallet">
+    Use MandateWallet directly for full control over the validate-sign-broadcast flow.
+  </Card>
+  <Card title="Handle Errors" icon="triangle-exclamation" href="/guides/handle-errors">
+    Learn how to catch and respond to every Mandate error type.
+  </Card>
+</CardGroup>

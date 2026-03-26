@@ -1,0 +1,50 @@
+---
+title: "mandate whoami"
+sidebarTitle: "whoami"
+description: "Display the current agent's identity, wallet address, chain ID, and credential status."
+---
+
+## What does whoami do?
+
+The `whoami` command reads your local credentials and displays the current agent's configuration. Use it to verify that login worked, check which agent is active, or confirm the wallet address before running transactions.
+
+```bash
+npx @mandate.md/cli whoami
+```
+
+## Output
+
+```json
+{
+  "agentId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "evmAddress": "0x1234567890abcdef1234567890abcdef12345678",
+  "chainId": 84532,
+  "keyPrefix": "mndt_test_abc12...xyz",
+  "baseUrl": "https://app.mandate.md"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `agentId` | Unique agent identifier |
+| `evmAddress` | Wallet address (or "not set" if `activate` has not been called) |
+| `chainId` | Target chain ID (default: `84532`, Base Sepolia) |
+| `keyPrefix` | Masked runtime key showing the prefix (`mndt_test_` or `mndt_live_`) |
+| `baseUrl` | Mandate API endpoint this agent connects to |
+
+The `keyPrefix` tells you whether you are using a test or live key. Test keys start with `mndt_test_`, live keys with `mndt_live_`.
+
+<Tip>
+Run `whoami` after `login` to confirm credentials saved correctly, and after `activate` to confirm the wallet address was set.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Validate a Transaction" icon="arrow-right" href="/cli/validate">
+    Run a policy check against your active agent.
+  </Card>
+  <Card title="Register a New Agent" icon="arrow-right" href="/cli/login">
+    Switch agents by registering a new one.
+  </Card>
+</CardGroup>

@@ -1,0 +1,207 @@
+---
+title: "Quickstart"
+sidebarTitle: "Quickstart"
+description: "Register an agent, validate a transaction, and execute a transfer with the Mandate SDK or CLI in under 5 minutes."
+---
+
+## Prerequisites
+
+You need two things to get started:
+
+- **Node.js 18+** or **Bun** installed
+- **A funded wallet** with its private key (use Base Sepolia testnet for testing)
+
+Get Base Sepolia ETH from the [Coinbase faucet](https://portal.cdp.coinbase.com/products/faucet) and USDC from the [Circle faucet](https://faucet.circle.com/).
+
+## Step 1: Install the SDK
+
+<Tabs>
+  <Tab title="bun">
+    ```bash
+    bun add @mandate/sdk
+    ```
+  </Tab>
+  <Tab title="npm">
+    ```bash
+    npm install @mandate/sdk
+    ```
+  </Tab>
+</Tabs>
+
+For CLI-only usage, no installation is needed. Run commands directly with `npx @mandate/cli`.
+
+## Step 2: Register your agent
+
+Registration creates an agent identity and returns two values: a `runtimeKey` for API authentication and a `claimUrl` for the wallet owner to link the agent to their dashboard.
+
+<CodeGroup>
+  ```typescript TypeScript
+  import { MandateClient } from '@mandate/sdk';
+
+  const { runtimeKey, claimUrl } = await MandateClient.register({
+    name: 'my-trading-agent',
+    evmAddress: '0xYourAgentWalletAddress',
+    chainId: 84532, // Base Sepolia
+  });
+
+  console.log('Runtime key:', runtimeKey); // Save this securely
+  console.log('Claim URL:', claimUrl);     // Give this to the wallet owner
+  ```
+
+  ```bash CLI
+  npx @mandate/cli login --name "my-trading-agent" --address 0xYourAgentWalletAddress
+  ```
+
+  ```bash curl
+  curl -X POST https://app.mandate.md/api/agents/register \
+    -H "Content-Type: application/json" \
+    -d '{
+      "name": "my-trading-agent",
+      "evmAddress": "0xYourAgentWalletAddress",
+      "chainId": 84532
+    }'
+  ```
+</CodeGroup>
+
+<Warning>
+Store the `runtimeKey` securely. It is the only credential your agent needs to authenticate with Mandate. Treat it like a database password. Share the `claimUrl` with the wallet owner so they can link this agent to their dashboard account.
+</Warning>
+
+The CLI stores credentials automatically in `~/.mandate/credentials.json` (chmod 600). With the SDK or curl, save the `runtimeKey` to your `.env` file:
+
+```bash
+MANDATE_RUNTIME_KEY=mndt_test_...
+```
+
+## Step 3: Validate a transaction
+
+Every transaction starts with a call to `validate()`. This is the core security boundary. Mandate checks your agent's policies, spend limits, allowlists, and reason field before the wallet is ever called.
+
+<CodeGroup>
+  ```typescript TypeScript
+  import { MandateClient, PolicyBlockedError, ApprovalRequiredError } from '@mandate/sdk';
+
+  const client = new MandateClient({
+    runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  });
+
+  try {
+    const result = await client.validate({
+      action: 'transfer',
+      amount: '50',
+      to: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+      token: 'USDC',
+      reason: 'Payment for API access - invoice #1234',
+    });
+
+    console.log('Allowed:', result.allowed);
+    console.log('Intent ID:', result.intentId);
+  } catch (err) {
+    if (err instanceof PolicyBlockedError) {
+      console.log('Blocked:', err.blockReason, err.declineMessage);
+    } else if (err instanceof ApprovalRequiredError) {
+      console.log('Needs approval:', err.intentId);
+      // Wait for the wallet owner to approve in the dashboard
+      const status = await client.waitForApproval(err.intentId);
+      console.log('Decision:', status.status);
+    }
+  }
+  ```
+
+  ```bash CLI
+  npx @mandate/cli validate \
+    --action transfer \
+    --amount 50 \
+    --to 0x036CbD53842c5426634e7929541eC2318f3dCF7e \
+    --token USDC \
+    --reason "Payment for API access - invoice #1234"
+  ```
+
+  ```bash curl
+  curl -X POST https://app.mandate.md/api/validate \
+    -H "Authorization: Bearer $MANDATE_RUNTIME_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "action": "transfer",
+      "amount": "50",
+      "to": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "token": "USDC",
+      "reason": "Payment for API access - invoice #1234"
+    }'
+  ```
+</CodeGroup>
+
+The `validate()` call returns `{ allowed: true, intentId: "..." }` on success. If the policy blocks the transaction, the SDK throws a `PolicyBlockedError` with a `blockReason` code. If the wallet owner configured an approval threshold, you get an `ApprovalRequiredError` with an `intentId` to poll.
+
+<Note>
+The `reason` field is required. Mandate scans it for prompt injection patterns and displays it to the wallet owner on approval requests. Write a clear, honest description of what the agent is doing and why.
+</Note>
+
+## Step 4: Execute the transfer
+
+`MandateWallet` handles the full flow: validate, sign locally, broadcast, post the transaction event, and confirm on-chain. Your private key never leaves your machine.
+
+```typescript TypeScript
+import { MandateWallet } from '@mandate/sdk';
+
+const wallet = new MandateWallet({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  privateKey: process.env.AGENT_PRIVATE_KEY! as `0x${string}`,
+  chainId: 84532, // Base Sepolia
+});
+
+const { txHash, intentId } = await wallet.transfer(
+  '0xRecipientAddress',
+  '5000000', // 5 USDC (6 decimals)
+  '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
+  { reason: 'Paying vendor for March services' },
+);
+
+console.log('Transaction:', txHash);
+console.log('Intent:', intentId);
+```
+
+<Tip>
+Use `MandateWallet` when your agent holds its own private key. Use `MandateClient.validate()` when a separate wallet service (Bankr, Locus, Sponge) handles signing. In both cases, Mandate validates the intent before any wallet call.
+</Tip>
+
+## What just happened?
+
+The full flow completed in five stages:
+
+1. **Validate.** `MandateWallet` sent the transaction parameters to Mandate's policy engine. The engine ran 14 checks: circuit breaker, schedule, allowlist, spend limits, daily/monthly quotas, reason scanner, and more.
+2. **Sign locally.** After validation passed, the SDK signed the transaction with your private key on your machine. Mandate never saw the key.
+3. **Broadcast.** The signed transaction was sent to the Base Sepolia RPC.
+4. **Post event.** The SDK reported the transaction hash back to Mandate for envelope verification. Mandate confirms the on-chain transaction matches what was validated.
+5. **Confirm.** The intent moved to `confirmed` status. If the on-chain transaction did not match the validated parameters, the circuit breaker would trip and block all future transactions until manual review.
+
+## Default policy
+
+After registration, your agent starts with a default policy:
+
+| Rule | Default value |
+|------|--------------|
+| Per-transaction limit | $100 USD |
+| Daily limit | $1,000 USD |
+| Address restrictions | None (any recipient allowed) |
+| Approval required | No |
+| Schedule | 24/7 |
+
+These defaults let you start testing immediately. Customize them in the [Policy Builder](https://app.mandate.md) dashboard: add address allowlists, lower spend limits, enable approval workflows, or restrict operating hours.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="How It Works" icon="diagram-project" href="/how-it-works">
+    The full validation flow, intent lifecycle, and state machine explained step by step.
+  </Card>
+  <Card title="Handle Errors" icon="triangle-exclamation" href="/guides/handle-errors">
+    Handle PolicyBlockedError, CircuitBreakerError, and 12 block reason codes in your agent.
+  </Card>
+  <Card title="Handle Approvals" icon="clock" href="/guides/handle-approvals">
+    Wait for human approval decisions with polling, timeouts, and callback patterns.
+  </Card>
+  <Card title="Integrations" icon="plug" href="/integrations/overview">
+    Drop-in plugins for OpenClaw, Claude Code, GOAT SDK, AgentKit, and ElizaOS.
+  </Card>
+</CardGroup>

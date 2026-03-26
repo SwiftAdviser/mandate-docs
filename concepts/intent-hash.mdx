@@ -1,0 +1,110 @@
+---
+title: "Intent Hash"
+sidebarTitle: "Intent Hash"
+description: "How the keccak256 intent hash binds validated transaction parameters to execution, preventing envelope swap attacks in raw validation flows."
+---
+
+## What is the intent hash?
+
+The intent hash is a keccak256 hash of canonical transaction parameters that ensures the Mandate server and the agent agree on exactly what transaction was validated. When the agent calls raw validation, both sides compute the same hash from the same inputs. If the hashes do not match, the transaction is blocked with `intent_hash_mismatch`. This mechanism is used only in raw validation flows. Action-based validation does not require an intent hash.
+
+The intent hash exists to prevent a specific attack: the envelope swap. Without it, an attacker could intercept the validation response and use the approval to broadcast a different transaction. The hash creates a cryptographic binding between what was validated and what gets signed.
+
+## How is the canonical string constructed?
+
+The intent hash is computed from a pipe-delimited string of 10 transaction parameters in a fixed order. Every parameter must match exactly between the client (SDK) and the server (PolicyEngineService). The canonical string format is:
+
+```
+{chainId}|{nonce}|{to_lowercase}|{calldata_lowercase}|{valueWei}|{gasLimit}|{maxFeePerGas}|{maxPriorityFeePerGas}|{txType}|{accessList_json}
+```
+
+Each field has strict formatting rules:
+
+| Field | Format | Example |
+|-------|--------|---------|
+| `chainId` | Decimal integer string | `84532` |
+| `nonce` | Decimal integer string | `42` |
+| `to` | Lowercase hex with `0x` prefix | `0x036cbd53842c5426634e7929541ec2318f3dcf7e` |
+| `calldata` | Lowercase hex with `0x` prefix | `0xa9059cbb000000000000000000000000...` |
+| `valueWei` | Decimal string (no hex) | `0` |
+| `gasLimit` | Decimal string | `100000` |
+| `maxFeePerGas` | Decimal string | `1000000000` |
+| `maxPriorityFeePerGas` | Decimal string | `1000000000` |
+| `txType` | Integer (always `2` for EIP-1559) | `2` |
+| `accessList` | JSON-serialized array | `[]` |
+
+**Example** (5 USDC transfer on Base Sepolia):
+```
+84532|42|0x036cbd53842c5426634e7929541ec2318f3dcf7e|0xa9059cbb0000000000000000000000001234567890abcdef1234567890abcdef123456780000000000000000000000000000000000000000000000000000000004c4b400|0|100000|1000000000|1000000000|2|[]
+```
+```
+keccak256(utf8Bytes(canonicalString)) -> 0x7a3f...b91e
+```
+
+## Why does the intent hash exist?
+
+The intent hash prevents the envelope swap attack. Without it, an attacker who intercepts the validation response could substitute different transaction parameters. The agent would sign a modified transaction (different recipient, different amount) and no check would catch the swap.
+
+With the intent hash, any modification produces a different hash. The server recomputes from the submitted parameters, compares, and returns `intent_hash_mismatch` on any divergence. The `EnvelopeVerifierService` provides a second defense layer: after broadcast, it fetches the on-chain transaction via RPC and compares `from`, `to`, `nonce`, `calldata`, and `value` against the stored intent. Mismatches trip the agent's circuit breaker.
+
+## How does the SDK handle intent hash computation?
+
+The `@mandate/sdk` package exports `computeIntentHash()` from `intentHash.ts`. The `MandateWallet` class calls it automatically during `prepareTransaction()`. You do not need to compute the hash manually unless you are building a custom integration without the SDK.
+
+```typescript
+import { computeIntentHash } from '@mandate/sdk';
+
+const hash = computeIntentHash({
+  chainId: 84532,
+  nonce: 42,
+  to: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  calldata: '0xa9059cbb...',
+  valueWei: '0',
+  gasLimit: '100000',
+  maxFeePerGas: '1000000000',
+  maxPriorityFeePerGas: '1000000000',
+  txType: 2,
+  accessList: [],
+});
+// hash: 0x7a3f...b91e
+```
+
+The server-side implementation in `PolicyEngineService::computeIntentHash()` uses the PHP `kornrunner/keccak` library. Both implementations produce identical output for the same input because they follow the same canonical string format and use keccak256 over UTF-8 encoded bytes.
+
+## What causes intent hash mismatches?
+
+Six common issues cause the client hash to diverge from the server hash. All of them are parameter formatting problems, not bugs in the hash function.
+
+| Cause | Problem | Fix |
+|-------|---------|-----|
+| Stale nonce | Another transaction was sent between validation and signing | Re-fetch nonce immediately before validation |
+| Gas estimation drift | Network conditions changed between estimate and validate | Use the same gas values for both hash computation and validation |
+| Address case | `0xAbC` vs `0xabc` | Always lowercase addresses before hashing |
+| AccessList serialization | `"[]"` vs `[]` vs `null` | Use `JSON.stringify([])` for empty access lists |
+| Wrong txType | Type 0 (legacy) vs type 2 (EIP-1559) | Always use `txType: 2` |
+| ValueWei format | Hex `0x0` vs decimal `"0"` | Always use decimal string representation |
+
+<Warning>
+The intent hash must be computed from the exact same values you submit to the API. If you estimate gas, then round it, use the rounded value in both the hash and the API payload.
+</Warning>
+
+<Note>
+Intent hash is only required for raw validation (`POST /api/validate/raw`). If you use action-based validation (`POST /api/validate`), you do not need to compute or submit an intent hash.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SDK Intent Hash" icon="code" href="/sdk/intent-hash">
+    SDK reference for computeIntentHash() and MandateWallet integration.
+  </Card>
+  <Card title="Troubleshooting Mismatches" icon="wrench" href="/troubleshooting/intent-hash-mismatch">
+    Step-by-step debugging guide for intent_hash_mismatch errors.
+  </Card>
+  <Card title="Intent Lifecycle" icon="arrows-spin" href="/concepts/intent-lifecycle">
+    How intents move through states after successful validation.
+  </Card>
+  <Card title="Non-Custodial Model" icon="key" href="/concepts/non-custodial">
+    Why the hash matters in a non-custodial architecture.
+  </Card>
+</CardGroup>

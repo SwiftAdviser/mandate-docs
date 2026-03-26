@@ -1,0 +1,117 @@
+---
+title: "Intent Hash"
+sidebarTitle: "Intent Hash"
+description: "How the Mandate intent hash is computed, the canonical string format, and common mismatch causes."
+---
+
+## What is the Intent Hash?
+
+The intent hash is a keccak256 digest of canonical transaction parameters. Both the SDK (client-side) and the Mandate API (server-side) compute it independently from the same inputs. If the two hashes don't match, the API rejects the request, and the envelope verifier flags the discrepancy.
+
+This mechanism ensures the server and your agent agree on exactly what transaction will be signed and broadcast. It prevents tampering, replay attacks, and accidental parameter drift between validation and signing.
+
+---
+
+## Canonical String Format
+
+The hash is computed over a pipe-delimited string of ten fields, in this exact order:
+
+```
+{chainId}|{nonce}|{to_lowercase}|{calldata_lowercase}|{valueWei}|{gasLimit}|{maxFeePerGas}|{maxPriorityFeePerGas}|{txType}|{accessList_json}
+```
+
+Key rules:
+- `to` and `calldata` are lowercased before joining.
+- `txType` defaults to `2` (EIP-1559) if not specified.
+- `accessList` is serialized with `JSON.stringify()`. An empty list produces `[]`.
+- The final string is UTF-8 encoded, then hashed with keccak256.
+
+---
+
+## SDK Function
+
+The SDK exports `computeIntentHash` for custom signing flows:
+
+```typescript
+import { computeIntentHash } from '@mandate/sdk';
+
+const hash = computeIntentHash({
+  chainId: 84532,
+  nonce: 42,
+  to: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  calldata: '0xa9059cbb0000000000000000000000001234567890abcdef',
+  valueWei: '0',
+  gasLimit: '100000',
+  maxFeePerGas: '1000000000',
+  maxPriorityFeePerGas: '1000000000',
+  txType: 2,
+  accessList: [],
+});
+// hash: 0x...
+```
+
+The function joins all fields with `|`, lowercases `to` and `calldata`, and returns the keccak256 hash as a hex string.
+
+---
+
+## HashInput Interface
+
+```typescript
+interface HashInput {
+  chainId: number;
+  nonce: number;
+  to: `0x${string}`;
+  calldata: `0x${string}`;
+  valueWei: string;
+  gasLimit: string;
+  maxFeePerGas: string;
+  maxPriorityFeePerGas: string;
+  txType?: number;
+  accessList?: unknown[];
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `chainId` | `number` | Yes | Chain ID (e.g. `84532` for Base Sepolia) |
+| `nonce` | `number` | Yes | Sender's current transaction nonce |
+| `to` | `` `0x${string}` `` | Yes | Destination address (lowercased in the hash) |
+| `calldata` | `` `0x${string}` `` | Yes | Transaction data (lowercased in the hash). Use `0x` for native transfers. |
+| `valueWei` | `string` | Yes | Native token value in wei (use `"0"` for ERC20 transfers) |
+| `gasLimit` | `string` | Yes | Gas limit for the transaction |
+| `maxFeePerGas` | `string` | Yes | EIP-1559 max fee per gas in wei |
+| `maxPriorityFeePerGas` | `string` | Yes | EIP-1559 max priority fee per gas in wei |
+| `txType` | `number` | No | Transaction type. Defaults to `2` (EIP-1559). |
+| `accessList` | `unknown[]` | No | EIP-2930 access list. Defaults to `[]`. |
+
+---
+
+## Common Mismatch Causes
+
+When the client and server hashes don't match, check these in order:
+
+1. **Stale nonce.** The nonce changed between estimation and validation. Re-fetch with `getTransactionCount` immediately before computing the hash.
+2. **Gas estimation drift.** Gas values differ between client and server. Use the exact values from your `estimateFeesPerGas` call.
+3. **Address casing.** The `to` address must be lowercased in the canonical string. The SDK handles this, but custom implementations sometimes miss it.
+4. **Calldata casing.** Same rule: hex characters in calldata must be lowercase. Mixed-case calldata from some ABIs causes mismatches.
+5. **AccessList serialization.** `JSON.stringify([])` produces `[]`, but non-empty access lists must serialize identically on both sides. Stick with `[]` unless your transaction requires access list entries.
+
+---
+
+## When You Need This
+
+`MandateWallet` computes the intent hash automatically during `sendTransaction()` and `transfer()`. You only need `computeIntentHash` directly if you are building a custom signing flow outside of `MandateWallet`, for example when using `MandateClient.rawValidate()` with your own gas estimation and signing logic.
+
+For debugging hash mismatches, see the [Intent Hash Mismatch](/troubleshooting/intent-hash-mismatch) troubleshooting guide.
+
+<CardGroup cols={3}>
+  <Card title="MandateWallet" icon="wallet" href="/sdk/mandate-wallet">
+    High-level wallet that computes intent hashes automatically.
+  </Card>
+  <Card title="Hash Mismatch Debugging" icon="magnifying-glass" href="/troubleshooting/intent-hash-mismatch">
+    Step-by-step guide to diagnose and fix hash mismatches.
+  </Card>
+  <Card title="Concepts: Intent Lifecycle" icon="arrows-spin" href="/concepts/intent-hash">
+    How intents flow from validation to on-chain confirmation.
+  </Card>
+</CardGroup>

@@ -1,0 +1,135 @@
+---
+title: "OpenClaw Plugin"
+sidebarTitle: "OpenClaw"
+description: "Install the Mandate OpenClaw plugin to give your agent three policy tools and a safety-net hook that blocks unvalidated transactions automatically."
+---
+
+## What is it?
+
+The Mandate OpenClaw plugin (`@mandate.md/mandate-openclaw-plugin`) adds three Mandate tools to any OpenClaw agent. It also registers a safety-net hook that intercepts financial tool calls and blocks them if the agent has not validated with Mandate first.
+
+The plugin is non-custodial. After validation passes, the agent uses its own wallet (Locus, Bankr, Sponge, or self-custodial keys) to sign and broadcast. Mandate never touches private keys.
+
+## Install
+
+```bash
+openclaw plugin install @mandate.md/mandate-openclaw-plugin
+```
+
+No environment variables needed. The plugin manages its own runtime key storage.
+
+## Three tools available to the agent
+
+After installation, the agent can call these tools:
+
+| Tool | Description | Required parameters | Optional parameters |
+|---|---|---|---|
+| `mandate_register` | Register the agent with Mandate. Returns a `runtimeKey` and `claimUrl`. | `name`, `evmAddress` | |
+| `mandate_validate` | Validate a transaction against the owner's policy. Must be called before every financial action. | `action`, `reason` | `amount`, `to`, `token`, `chain` |
+| `mandate_status` | Check the state of a Mandate intent after validation. | `intentId` | |
+
+<Note>
+The `reason` field in `mandate_validate` is scanned for prompt injection patterns. Write a clear, honest description of what the agent is doing. If the reason triggers the injection scanner, the transaction is blocked with a `reason_blocked` code.
+</Note>
+
+## Setup flow
+
+### Step 1: Register the agent
+
+The agent calls `mandate_register` once on first run. This creates an agent identity and returns two values.
+
+```
+mandate_register name="my-openclaw-agent" evmAddress="0xYourWalletAddress"
+```
+
+The response includes:
+- **`runtimeKey`**: Saved automatically to `~/.openclaw/mandate-data/runtime-key`. Used for all future API calls.
+- **`claimUrl`**: Show this to the wallet owner. They visit this URL to link the agent to their Mandate dashboard, where they configure spend limits, allowlists, and approval rules.
+
+### Step 2: Owner claims the agent
+
+The wallet owner opens the `claimUrl` in their browser and links the agent to their dashboard account. Until this step completes, the agent operates under the default policy: $100/tx, $1,000/day, no address restrictions.
+
+### Step 3: Validate before every transaction
+
+Before any financial action (transfer, swap, send, buy, sell, bridge, stake, bet), the agent calls `mandate_validate`.
+
+```
+mandate_validate action="transfer" amount="50" to="0xRecipientAddress" token="USDC" reason="Payment for March design work"
+```
+
+If `allowed: true`, the agent proceeds with its wallet. If `blocked: true`, the agent stops and reports the `blockReason` to the user.
+
+If the policy requires approval, the response includes `requiresApproval: true` and an `intentId`. The agent waits for the owner to approve in the dashboard before proceeding.
+
+### Step 4: Check intent status (optional)
+
+After validation, the agent can poll the intent state.
+
+```
+mandate_status intentId="intent_abc123"
+```
+
+This returns the current state: `allowed`, `approval_pending`, `approved`, `broadcasted`, `confirmed`, `failed`, or `expired`.
+
+## Safety-net hook
+
+The plugin registers a `message:preprocessed` hook at priority 100. This hook runs on every tool call the agent makes, including tools from other plugins.
+
+**How it works:**
+
+1. The hook checks if the tool name or input matches financial patterns: transfer, payment, swap, send, trade, buy, sell, order, bridge, stake, withdraw, deposit, or any input containing an Ethereum address with a transaction keyword.
+2. If the tool is financial and no prior `mandate_validate` call was made, the hook calls `POST /api/validate` automatically with the tool name and input as context.
+3. If validation fails, the hook injects a block message into the conversation. The agent sees the block reason and cannot proceed.
+4. Mandate's own tools (`mandate_register`, `mandate_validate`, `mandate_status`) are excluded from interception.
+
+This means the agent cannot accidentally bypass Mandate. Even if the agent calls a wallet tool directly without calling `mandate_validate` first, the hook catches it.
+
+<Warning>
+The safety-net hook calls the Mandate API in real time. If the API is unreachable, the hook blocks the transaction. This is intentional: if the guard is offline, the vault stays locked.
+</Warning>
+
+## Configuration
+
+The plugin stores its runtime key at `~/.openclaw/mandate-data/runtime-key`. This file is created automatically when the agent calls `mandate_register`. The key persists across agent restarts.
+
+You can also set the key via OpenClaw plugin config:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "mandate-openclaw-plugin": {
+        "config": {
+          "runtimeKey": "mndt_test_abc123..."
+        }
+      }
+    }
+  }
+}
+```
+
+The plugin checks both locations. The file-based key takes precedence if both exist.
+
+## How validation works under the hood
+
+Every `mandate_validate` call sends a `POST /api/validate` request to `https://app.mandate.md/api`. The policy engine runs 14 sequential checks: circuit breaker, schedule window, address allowlist, blocked actions, per-transaction limits, daily and monthly quotas, risk screening, reputation scoring, reason scanning, and approval thresholds.
+
+The response includes an `intentId` that links the validation to the audit trail. Every call is logged with the `action` and `reason` the agent provided. The wallet owner sees the full history in their dashboard.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Integrations Overview" icon="grid-2" href="/integrations/overview">
+    Compare all integration methods and find the right one for your stack.
+  </Card>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Full guide to the validate endpoint, parameters, and response handling.
+  </Card>
+  <Card title="Register an Agent" icon="user-plus" href="/guides/register-agent">
+    Registration flow, claim URLs, and credential storage explained.
+  </Card>
+  <Card title="Handle Errors" icon="triangle-exclamation" href="/guides/handle-errors">
+    Handle PolicyBlockedError, CircuitBreakerError, and 12 block reason codes.
+  </Card>
+</CardGroup>

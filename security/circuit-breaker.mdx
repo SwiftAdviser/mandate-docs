@@ -1,0 +1,50 @@
+---
+title: "Circuit Breaker"
+sidebarTitle: "Circuit Breaker"
+description: "Emergency stop mechanism that blocks all transactions for a compromised or malfunctioning agent."
+---
+
+A **circuit breaker** is an emergency stop that immediately blocks all transactions for a specific agent. Once tripped, every `validate()` call returns a `CircuitBreakerError` (HTTP 403) until the owner manually resets it.
+
+## What triggers the circuit breaker?
+
+Two events trip the circuit breaker:
+
+**Manual activation.** The agent owner toggles the circuit breaker from the dashboard or via the API. Use this when you suspect the agent is compromised, behaving unexpectedly, or needs to be paused for maintenance.
+
+**Automatic activation.** The envelope verifier detects that an on-chain transaction does not match the parameters that were validated. This means the agent (or something between the agent and the blockchain) modified the transaction after Mandate approved it. This is a serious security event, and the circuit breaker trips immediately.
+
+## How do you reset the circuit breaker?
+
+Only the agent owner can reset the circuit breaker. Navigate to the Agents page in the dashboard, find the agent, and toggle the circuit breaker off. There is no auto-reset timer. This is intentional: an automatic trip indicates a potential security breach that requires human investigation before resuming operations.
+
+Before resetting, review the audit log for the agent. Check what triggered the trip. If it was an envelope mismatch, investigate whether the agent's signing infrastructure was compromised.
+
+## What are the technical details?
+
+The circuit breaker state is cached in Redis with a 30-second TTL and falls back to the database if Redis is unavailable. When the circuit breaker is tripped or reset, the Redis cache is invalidated immediately. This means the state change takes effect within milliseconds, not at the next cache expiration.
+
+The check runs before the policy engine. Even if a transaction would otherwise be approved by all policies, a tripped circuit breaker blocks it.
+
+## How do you interact with the circuit breaker via API?
+
+Two endpoints control the circuit breaker:
+
+```
+POST /api/agents/{agentId}/circuit-break   # Toggle on/off
+GET  /api/agents/{agentId}/circuit-break    # Check status
+```
+
+Both require dashboard authentication (not runtime key auth). The agent itself cannot trip or reset its own circuit breaker.
+
+<CardGroup cols={3}>
+  <Card title="Dashboard Controls" icon="toggle-on" href="/dashboard/circuit-breaker">
+    Manage circuit breakers from the dashboard
+  </Card>
+  <Card title="Envelope Verification" icon="file-check" href="/security/envelope-verification">
+    What triggers automatic trips
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/troubleshooting/circuit-breaker-tripped">
+    Diagnose and recover from a tripped breaker
+  </Card>
+</CardGroup>

@@ -1,0 +1,51 @@
+---
+title: "Dashboard Overview"
+sidebarTitle: "Overview"
+description: "Navigate the Mandate dashboard to manage agents, configure policies, and monitor transactions at app.mandate.md."
+---
+
+## What is the Mandate dashboard?
+
+The Mandate dashboard is your control center for managing AI agent wallets. You access it at [app.mandate.md](https://app.mandate.md) by signing in with GitHub OAuth. Once authenticated, you can register agents, define spend policies, approve transactions, and review audit logs from a single interface.
+
+## Sign in
+
+Navigate to [app.mandate.md](https://app.mandate.md) and click **Sign in with GitHub**. Mandate uses GitHub OAuth exclusively for dashboard authentication. No email/password accounts exist.
+
+After your first login, you land on the main dashboard page showing a summary of your agents, recent transactions, and any pending approvals.
+
+## Navigation
+
+The sidebar provides access to every section of the dashboard:
+
+| Section | Purpose |
+|---------|---------|
+| **Agents** | Register, edit, and manage agent credentials |
+| **Policy Builder** | Define spend limits, allowlists, and approval rules per agent |
+| **Approvals** | Review and act on pending transaction requests |
+| **Audit Log** | Browse immutable transaction history with filters |
+| **Insights** | AI-generated policy recommendations based on transaction patterns |
+| **Notifications** | Configure Telegram, Slack, and webhook alerts |
+
+## Agent activation prerequisite
+
+The full sidebar navigation only appears after you activate at least one agent. Activation requires setting a `wallet_address` on the agent. Until then, you see a limited view prompting you to complete agent setup.
+
+<Tip>
+Register your first agent and assign a wallet address to unlock all dashboard features.
+</Tip>
+
+## Dashboard home
+
+The home page displays key metrics at a glance: active agent count, total transactions this month, pending approvals, and recent activity. Use it as your starting point to spot issues quickly and navigate to the relevant section.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Manage Agents" icon="robot" href="/dashboard/agents">
+    Register agents, regenerate keys, and configure wallet addresses.
+  </Card>
+  <Card title="Policy Builder" icon="shield-check" href="/dashboard/policy-builder">
+    Set spend limits, allowlists, and approval thresholds for each agent.
+  </Card>
+</CardGroup>

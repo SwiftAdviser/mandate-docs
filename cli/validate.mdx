@@ -1,0 +1,136 @@
+---
+title: "mandate validate"
+sidebarTitle: "validate"
+description: "Validate a transaction against your agent's policy. Supports preflight (action-based) and raw EVM modes."
+---
+
+## What does validate do?
+
+The `validate` command checks a transaction against the policy engine before your agent signs anything. If the policy allows it, you get an `intentId`. If it blocks, you get a `blockReason`. If it requires approval, you get an `intentId` and a prompt to wait.
+
+## Preflight mode (default, recommended)
+
+Preflight validation is action-based. You describe what you want to do, and the policy engine evaluates it. No gas parameters, no calldata, no intentHash computation.
+
+```bash
+npx @mandate.md/cli validate \
+  --action transfer \
+  --amount 50 \
+  --to 0x036CbD53842c5426634e7929541eC2318f3dCF7e \
+  --token USDC \
+  --reason "Payment for API access"
+```
+
+### Options
+
+| Flag | Required | Description |
+|------|:---:|-------------|
+| `--action` | Yes | Action type: `transfer`, `approve`, `swap`, or custom |
+| `--reason` | Yes | Plain-language explanation of why the agent is transacting |
+| `--amount` | No | Amount in token units |
+| `--to` | No | Destination address (0x...) |
+| `--token` | No | Token symbol (e.g. `USDC`) or contract address |
+| `--chain` | No | Chain name or chain ID |
+
+### Success output
+
+```json
+{
+  "ok": true,
+  "intentId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "feedback": "Mandate: policy check passed"
+}
+```
+
+### Blocked output
+
+```json
+{
+  "error": "POLICY_BLOCKED",
+  "message": "Mandate: blocked: amount exceeds per-transaction limit",
+  "blockReason": "SPEND_LIMIT_PER_TX"
+}
+```
+
+The `blockReason` code tells you exactly which policy check failed. See the [block reasons reference](/reference/block-reasons) for the full list.
+
+### Approval required
+
+When the transaction triggers an approval workflow, the response includes the `intentId` and a next step:
+
+```json
+{
+  "ok": true,
+  "requiresApproval": true,
+  "intentId": "a1b2c3d4-...",
+  "feedback": "Mandate: approval required, waiting for owner decision",
+  "next": "Run: mandate approve a1b2c3d4-..."
+}
+```
+
+Run `mandate approve <intentId>` to poll until the owner approves or rejects in the dashboard.
+
+## The reason field
+
+Every validation requires a `--reason`. This is not optional decoration. The policy engine scans the reason for prompt injection patterns, anomalous behavior, and policy violations. A clear, specific reason ("Payment for March invoice from Acme Corp") is more likely to pass than a vague one ("sending money").
+
+<Warning>
+If you omit `--reason`, the command returns an error. The policy engine requires it for every transaction.
+</Warning>
+
+## Raw mode (legacy)
+
+Raw mode sends full EVM transaction parameters and computes an `intentHash` locally. Use this only for self-custodial flows where you build the transaction yourself.
+
+<Info>
+**Deprecated.** Use preflight mode instead. Raw validation is kept for legacy self-custodial flows but will be removed in a future version.
+</Info>
+
+```bash
+npx @mandate.md/cli validate --raw \
+  --to 0x036CbD53842c5426634e7929541eC2318f3dCF7e \
+  --calldata 0xa9059cbb000000000000000000000000 \
+  --nonce 42 \
+  --gasLimit 90000 \
+  --maxFeePerGas 1000000000 \
+  --maxPriorityFeePerGas 1000000000 \
+  --reason "Invoice #127 from Alice"
+```
+
+### Raw mode required flags
+
+| Flag | Description |
+|------|-------------|
+| `--raw` | Enable raw EVM validation |
+| `--to` | Contract or recipient address |
+| `--nonce` | Transaction nonce |
+| `--gasLimit` | Gas limit |
+| `--maxFeePerGas` | Max fee per gas (wei) |
+| `--maxPriorityFeePerGas` | Max priority fee per gas (wei) |
+| `--reason` | Why this transaction is being sent |
+
+### Raw mode optional flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--calldata` | `0x` | Transaction calldata |
+| `--valueWei` | `0` | Value in wei |
+| `--chainId` | From credentials | Chain ID |
+| `--txType` | `2` | Transaction type |
+| `--accessList` | `[]` | Access list (JSON string) |
+
+Raw mode returns an additional `next` field pointing to the `event` command for posting the txHash after broadcast.
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Transfer Command" icon="arrow-right" href="/cli/transfer">
+    Shorthand for ERC20 transfers with automatic action mapping.
+  </Card>
+  <Card title="Wait for Approval" icon="arrow-right" href="/cli/approve">
+    Poll until the owner approves a pending intent.
+  </Card>
+  <Card title="Validate Guide" icon="arrow-right" href="/guides/validate-transactions">
+    End-to-end walkthrough of the validation flow.
+  </Card>
+</CardGroup>

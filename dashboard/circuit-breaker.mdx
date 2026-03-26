@@ -1,0 +1,67 @@
+---
+title: "Circuit Breaker"
+sidebarTitle: "Circuit Breaker"
+description: "Toggle the circuit breaker to instantly block or resume all transactions for an agent in the Mandate dashboard."
+---
+
+## What is the circuit breaker?
+
+The circuit breaker is an emergency control that blocks all transactions for a specific agent. When tripped, every validation request from that agent is rejected immediately, regardless of policy rules. Use it when you detect suspicious behavior or need to halt an agent while investigating an issue.
+
+## Manual toggle
+
+On the agent detail page, the circuit breaker toggle is always visible. Two states:
+
+- **Off (normal)**: the agent operates under its configured policy. Transactions are evaluated normally.
+- **On (tripped)**: all transactions are blocked. The agent receives a `CircuitBreakerError` on every validation attempt.
+
+Click the toggle to switch states. Tripping the circuit breaker takes effect immediately. No confirmation delay.
+
+## Automatic tripping
+
+The circuit breaker trips automatically when [envelope verification](/security/envelope-verification) detects a mismatch. This means the on-chain transaction did not match the parameters that were validated. Mandate treats this as a security event and halts the agent.
+
+When auto-tripped, the dashboard shows:
+
+| Field | Value |
+|-------|-------|
+| **State** | Tripped |
+| **Tripped at** | Timestamp of the triggering event |
+| **Reason** | Description of what caused the trip (e.g., "envelope mismatch: to address differs") |
+
+<Warning>
+An auto-tripped circuit breaker indicates a potential security issue. Investigate the mismatch before resetting. Check the audit log for the failing transaction and verify the agent's signing logic.
+</Warning>
+
+## API control
+
+You can also trip or reset the circuit breaker programmatically:
+
+```bash curl
+curl -X POST https://app.mandate.md/api/agents/{agentId}/circuit-break \
+  -H "Authorization: Bearer mndt_test_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{"active": true}'
+```
+
+Set `active` to `true` to trip, `false` to reset.
+
+## Resuming normal operation
+
+Toggle the circuit breaker off from the dashboard or set `active: false` via the API. The agent resumes normal policy evaluation immediately. No cooldown period applies.
+
+Before resetting, verify that the root cause of the trip has been addressed. Check the [audit log](/dashboard/audit-log) for failed transactions and review the agent's configuration.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Circuit Breaker (Security)" icon="shield-halved" href="/security/circuit-breaker">
+    Security model and design rationale for the circuit breaker.
+  </Card>
+  <Card title="Envelope Verification" icon="envelope-open-text" href="/security/envelope-verification">
+    How Mandate verifies on-chain transactions match validated parameters.
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/troubleshooting/circuit-breaker-tripped">
+    Steps to diagnose and resolve a tripped circuit breaker.
+  </Card>
+</CardGroup>

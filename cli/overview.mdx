@@ -1,0 +1,108 @@
+---
+title: "CLI Overview"
+sidebarTitle: "Overview"
+description: "Install and use the Mandate CLI to register agents, validate transactions, and scan codebases for unprotected wallet calls."
+---
+
+## What is the Mandate CLI?
+
+The Mandate CLI (`@mandate.md/cli`) is a command-line tool for managing agent wallets, validating transactions against your policies, and scanning codebases for unprotected financial calls. It wraps the Mandate API into 9 commands that cover the full agent lifecycle: registration, activation, validation, broadcasting, and monitoring.
+
+## Install
+
+Run any command directly with `npx`:
+
+```bash
+npx @mandate.md/cli <command>
+```
+
+Or install globally:
+
+<Tabs>
+  <Tab title="bun">
+    ```bash
+    bun add -g @mandate.md/cli
+    ```
+  </Tab>
+  <Tab title="npm">
+    ```bash
+    npm install -g @mandate.md/cli
+    ```
+  </Tab>
+</Tabs>
+
+After global install, use `mandate` directly:
+
+```bash
+mandate validate --action transfer --amount 10 --to 0xRecipientAddress --token USDC --reason "Invoice #42"
+```
+
+## Commands
+
+| Command | Auth Required | Description |
+|---------|:---:|-------------|
+| `login` | No | Register a new agent, get a runtime key |
+| `activate` | Yes | Set wallet address after registration |
+| `whoami` | Yes | Show current agent info and credentials |
+| `validate` | Yes | Validate a transaction against your policy |
+| `transfer` | Yes | Validate an ERC20 transfer |
+| `event` | Yes | Post a txHash after broadcast |
+| `status` | Yes | Check an intent's current state |
+| `approve` | Yes | Wait for human approval on a pending intent |
+| `scan` | No | Scan codebase for unprotected wallet calls |
+
+## Credential storage
+
+The `login` command saves your runtime key and agent metadata to `~/.mandate/credentials.json`. All authenticated commands read from this file automatically.
+
+```json
+{
+  "runtimeKey": "mndt_test_abc123...",
+  "agentId": "a1b2c3d4-...",
+  "claimUrl": "https://app.mandate.md/claim/...",
+  "evmAddress": "0x...",
+  "chainId": 84532,
+  "baseUrl": "https://app.mandate.md"
+}
+```
+
+The file is created with `0600` permissions (owner-only read/write). If you need to switch agents, delete the file and run `login` again.
+
+<Warning>
+Never commit `~/.mandate/credentials.json` to version control. The runtime key grants full agent access to the Mandate API.
+</Warning>
+
+## Agent discovery
+
+AI agents can discover CLI commands programmatically using two flags:
+
+```bash
+npx @mandate.md/cli --llms          # Machine-readable command manifest
+npx @mandate.md/cli --llms-full     # Full manifest with option schemas
+```
+
+Each response includes a `next` field pointing to the logical next step, so agents can chain commands without hardcoded workflows.
+
+## MCP server mode
+
+Start the CLI as an MCP stdio server for integration with tools like Claude Code:
+
+```bash
+npx @mandate.md/cli --mcp
+```
+
+This exposes all CLI commands as MCP tools over standard input/output.
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Register an Agent" icon="arrow-right" href="/cli/login">
+    Create your first agent and get a runtime key.
+  </Card>
+  <Card title="Validate a Transaction" icon="arrow-right" href="/cli/validate">
+    Run your first policy check from the command line.
+  </Card>
+  <Card title="Scan Your Codebase" icon="arrow-right" href="/cli/scan">
+    Find unprotected wallet calls before they reach production.
+  </Card>
+</CardGroup>

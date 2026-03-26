@@ -1,0 +1,151 @@
+---
+title: "Intent Hash Mismatch"
+sidebarTitle: "Intent Hash Mismatch"
+description: "Debugging guide for intent_hash_mismatch errors in Mandate raw validation, with a 7-point checklist and common fixes."
+---
+
+## What causes an intent hash mismatch?
+
+The `intent_hash_mismatch` error occurs during raw validation (`POST /api/validate/raw`) when the `intentHash` submitted by the client does not match the server's recomputation from the same transaction parameters. The server computes its own hash from the parameters you send and compares it to your submitted hash. Any difference in formatting, casing, or value causes a mismatch.
+
+<Info>
+This error only applies to raw validation. Action-based validation (`POST /validate`) does not use intent hashes. If you are building a new integration, use action-based validation and skip this page entirely.
+</Info>
+
+## The canonical hash format
+
+The intent hash is computed as:
+
+```
+intentHash = keccak256("<chainId>|<nonce>|<to_lower>|<calldata_lower>|<valueWei>|<gasLimit>|<maxFeePerGas>|<maxPriorityFeePerGas>|<txType>|<accessList_json>")
+```
+
+Every field must match exactly. The server uses the same formula with the parameters from your request body.
+
+## Debugging checklist
+
+Work through these 7 checks in order. Most mismatches are caused by items 1 through 3.
+
+### 1. Verify the nonce is current
+
+The nonce must be the next unused nonce for the sending address. If you fetched the nonce earlier and another transaction was sent in between, your nonce is stale. Fetch the nonce immediately before computing the hash.
+
+```typescript
+const nonce = await publicClient.getTransactionCount({ address: walletAddress });
+```
+
+### 2. Lowercase all addresses
+
+The `to` field must be lowercase in the hash computation. The most common mistake is using a checksummed (mixed-case) address.
+
+```typescript
+// Wrong: checksummed address
+const to = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+// Correct: lowercase
+const to = '0x036cbd53842c5426634e7929541ec2318f3dcf7e';
+```
+
+### 3. Gas estimation may differ
+
+If you estimate gas, then compute the hash, then re-estimate gas, the values may change. Use fixed gas values during testing. In production, estimate once and use the same values for both the hash and the transaction.
+
+```typescript
+const gasLimit = '90000';
+const maxFeePerGas = '1000000000';
+const maxPriorityFeePerGas = '1000000000';
+// Use these exact values in both the hash and the API request
+```
+
+### 4. accessList must be an empty array
+
+The `accessList` field must be `[]` (an empty JSON array), not `undefined`, `null`, or omitted. The server serializes it as `"[]"` in the canonical string.
+
+```typescript
+// Wrong
+const accessList = undefined;
+
+// Correct
+const accessList = [];
+```
+
+### 5. txType must be 2
+
+The `txType` field must be `2` (EIP-1559). Type 0 (legacy) and type 1 (EIP-2930) transactions are not supported.
+
+### 6. Calldata must include 0x prefix and be lowercase
+
+The `calldata` field must start with `0x` and use lowercase hex characters.
+
+```typescript
+// Wrong: no prefix
+const calldata = 'a9059cbb000000000000000000000000...';
+
+// Wrong: uppercase
+const calldata = '0xA9059CBB000000000000000000000000...';
+
+// Correct
+const calldata = '0xa9059cbb000000000000000000000000...';
+```
+
+### 7. valueWei must be a string
+
+The `valueWei` field must be a string, not a `BigInt` or `number`. JavaScript's `BigInt` does not serialize to JSON the same way as a string.
+
+```typescript
+// Wrong: BigInt
+const valueWei = 0n;
+
+// Wrong: number
+const valueWei = 0;
+
+// Correct: string
+const valueWei = '0';
+```
+
+## Use the SDK function
+
+The safest approach is to use the SDK's `computeIntentHash()` function. It handles all formatting, casing, and serialization automatically.
+
+```typescript
+import { computeIntentHash } from '@mandate.md/sdk';
+
+const intentHash = computeIntentHash({
+  chainId: 84532,
+  nonce: 42,
+  to: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // checksummed is fine, SDK lowercases
+  calldata: '0xa9059cbb...',
+  valueWei: '0',
+  gasLimit: '90000',
+  maxFeePerGas: '1000000000',
+  maxPriorityFeePerGas: '1000000000',
+  txType: 2,
+  accessList: [],
+});
+```
+
+The function normalizes all inputs before hashing. If you use `computeIntentHash()`, mismatches should not occur unless the nonce is stale.
+
+## Still getting mismatches?
+
+If you have verified all 7 items and the error persists, log the canonical string before hashing and compare it character by character with the expected format:
+
+```typescript
+const canonical = `${chainId}|${nonce}|${to.toLowerCase()}|${calldata.toLowerCase()}|${valueWei}|${gasLimit}|${maxFeePerGas}|${maxPriorityFeePerGas}|${txType}|${JSON.stringify(accessList)}`;
+console.log('Canonical string:', canonical);
+console.log('Hash:', keccak256(toBytes(canonical)));
+```
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Intent Hash Concepts" icon="fingerprint" href="/concepts/intent-hash">
+    How the intent hash binds validation to execution.
+  </Card>
+  <Card title="SDK computeIntentHash" icon="code" href="/sdk/intent-hash">
+    SDK function reference for hash computation.
+  </Card>
+  <Card title="Common Errors" icon="circle-exclamation" href="/troubleshooting/common-errors">
+    Solutions for other frequent Mandate errors.
+  </Card>
+</CardGroup>

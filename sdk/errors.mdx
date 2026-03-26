@@ -1,0 +1,233 @@
+---
+title: "Error Classes"
+sidebarTitle: "Errors"
+description: "Reference for all error classes thrown by the Mandate SDK, with recovery patterns and code examples."
+---
+
+## Class Hierarchy
+
+The SDK uses typed error classes so you can catch and handle each scenario precisely. Every error extends `MandateError`, which itself extends the native `Error`.
+
+```
+MandateError (base)
+├── PolicyBlockedError   (422)
+├── CircuitBreakerError  (403)
+├── ApprovalRequiredError (202)
+└── RiskBlockedError     (422)
+```
+
+All error classes are exported from `@mandate/sdk`:
+
+```typescript
+import {
+  MandateError,
+  PolicyBlockedError,
+  CircuitBreakerError,
+  ApprovalRequiredError,
+  RiskBlockedError,
+} from '@mandate/sdk';
+```
+
+---
+
+## MandateError
+
+The base class for all SDK errors. You receive this for generic API failures that don't fall into a more specific category.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `message` | `string` | Human-readable error description |
+| `statusCode` | `number` | HTTP status code from the API |
+| `blockReason` | `string \| undefined` | Machine-readable reason code, if available |
+
+**When it fires:** Any non-OK API response that isn't a 403 circuit breaker, 422 policy block, or 202 approval redirect. Common cases: network errors, 500 server errors, malformed requests.
+
+**Recovery:** Check `statusCode` to decide whether to retry. 5xx errors are transient and safe to retry with backoff. 4xx errors indicate a client-side problem.
+
+```typescript
+try {
+  await client.validate(payload);
+} catch (err) {
+  if (err instanceof MandateError) {
+    console.error(`API error ${err.statusCode}: ${err.message}`);
+  }
+}
+```
+
+---
+
+## PolicyBlockedError
+
+Thrown when a transaction violates one or more policy rules: spend limits, allowlists, time schedules, function selectors, or other constraints configured in the dashboard.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `message` | `string` | Human-readable description |
+| `statusCode` | `number` | Always `422` |
+| `blockReason` | `string` | Machine-readable reason (e.g. `spend_limit_exceeded`, `address_not_allowed`) |
+| `detail` | `string \| undefined` | Additional context from the policy engine |
+| `declineMessage` | `string \| undefined` | User-facing decline message set by the policy owner |
+
+**When it fires:** The policy engine evaluates the transaction against the agent's active policy and finds a violation. This covers per-transaction limits, daily/monthly quotas, address allowlists, time-of-day schedules, and function selector restrictions.
+
+**Recovery:** Display `declineMessage` to the end user if present. Adjust the transaction parameters (lower the amount, use an allowed address) or ask the agent owner to update the policy in the dashboard.
+
+```typescript
+try {
+  await wallet.transfer(to, amount, tokenAddress);
+} catch (err) {
+  if (err instanceof PolicyBlockedError) {
+    console.log(`Blocked: ${err.blockReason}`);
+    if (err.declineMessage) {
+      console.log(`Reason: ${err.declineMessage}`);
+    }
+    if (err.detail) {
+      console.log(`Detail: ${err.detail}`);
+    }
+  }
+}
+```
+
+<Note>
+`PolicyBlockedError` is also exported as `MandateBlockedError` for backward compatibility. They are the same class.
+</Note>
+
+---
+
+## CircuitBreakerError
+
+Thrown when the agent's circuit breaker is active. This is an emergency stop: all transactions are blocked until the owner resets it.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `message` | `string` | `"Circuit breaker is active. All transactions are blocked."` |
+| `statusCode` | `number` | Always `403` |
+| `blockReason` | `string` | Always `"circuit_breaker_active"` |
+
+**When it fires:** The circuit breaker trips automatically when the envelope verifier detects that a broadcast transaction does not match the parameters that were validated. An owner can also trigger it manually from the dashboard.
+
+**Recovery:** No programmatic fix exists. The agent owner must investigate and reset the circuit breaker in the Mandate dashboard. Your code should log the error and halt further transaction attempts.
+
+```typescript
+try {
+  await wallet.transfer(to, amount, tokenAddress);
+} catch (err) {
+  if (err instanceof CircuitBreakerError) {
+    console.error('EMERGENCY: Circuit breaker active. Halting all transactions.');
+    // Notify ops team, stop the agent loop
+  }
+}
+```
+
+---
+
+## ApprovalRequiredError
+
+Thrown when a transaction passes policy checks but requires explicit human approval before it can proceed.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `message` | `string` | `"Transaction requires human approval. Poll /status until approved."` |
+| `statusCode` | `number` | Always `202` |
+| `blockReason` | `string` | Always `"approval_required"` |
+| `intentId` | `string` | The intent ID to poll for a decision |
+| `approvalId` | `string` | The approval request ID |
+| `approvalReason` | `string \| undefined` | Why approval is needed (e.g. `"amount_above_threshold"`) |
+
+**When it fires:** The policy includes an approval rule, and the transaction matches that rule's criteria. The intent enters `approval_pending` state and waits for the owner to approve or reject via the dashboard.
+
+**Recovery:** Call `client.waitForApproval(intentId)` to poll until the owner makes a decision. The method resolves when approved, or throws if rejected or expired. You can also use `MandateWallet.sendTransactionWithApproval()` which handles this flow automatically.
+
+```typescript
+try {
+  await client.validate(payload);
+} catch (err) {
+  if (err instanceof ApprovalRequiredError) {
+    console.log(`Awaiting approval: ${err.approvalId}`);
+    console.log(`Reason: ${err.approvalReason ?? 'policy rule'}`);
+
+    const status = await client.waitForApproval(err.intentId, {
+      timeoutMs: 3600_000, // 1 hour (matches server TTL)
+      onPoll: (s) => console.log(`Status: ${s.status}`),
+    });
+
+    console.log(`Approved. Proceed with intent ${status.intentId}`);
+  }
+}
+```
+
+---
+
+## RiskBlockedError
+
+Thrown when the destination address is flagged by the Aegis risk scanner.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `message` | `string` | Human-readable description of the risk block |
+| `statusCode` | `number` | Always `422` |
+| `blockReason` | `string` | Risk reason code (e.g. `"aegis_critical_risk"`, `"aegis_high_risk"`) |
+
+**When it fires:** Before policy evaluation, Mandate runs the destination address through its risk scanner. If the address is associated with known exploits, sanctions, or other critical risks, this error fires.
+
+**Recovery:** Verify the destination address. If you believe it is a false positive, contact the Mandate risk team. Do not attempt to bypass this check.
+
+```typescript
+try {
+  await wallet.transfer(to, amount, tokenAddress);
+} catch (err) {
+  if (err instanceof RiskBlockedError) {
+    console.error(`Risky address: ${err.blockReason}`);
+    // Do not retry with the same address
+  }
+}
+```
+
+---
+
+## Instanceof Checking Pattern
+
+Use `instanceof` to handle each error type in a single try/catch block. Order matters: check specific subclasses before the base `MandateError`.
+
+```typescript
+import {
+  PolicyBlockedError,
+  CircuitBreakerError,
+  ApprovalRequiredError,
+  RiskBlockedError,
+  MandateError,
+} from '@mandate/sdk';
+
+try {
+  const result = await wallet.transfer(to, amount, tokenAddress);
+} catch (err) {
+  if (err instanceof CircuitBreakerError) {
+    // Emergency stop. Halt all operations.
+    process.exit(1);
+  } else if (err instanceof RiskBlockedError) {
+    // Dangerous address. Log and skip.
+    logger.warn(`Risk block: ${err.blockReason}`);
+  } else if (err instanceof ApprovalRequiredError) {
+    // Wait for human decision.
+    const status = await client.waitForApproval(err.intentId);
+  } else if (err instanceof PolicyBlockedError) {
+    // Policy violation. Show decline message.
+    logger.info(err.declineMessage ?? err.blockReason);
+  } else if (err instanceof MandateError) {
+    // Generic API error. Check status code.
+    logger.error(`API error ${err.statusCode}: ${err.message}`);
+  }
+}
+```
+
+<CardGroup cols={3}>
+  <Card title="Handle Errors Guide" icon="shield-check" href="/guides/handle-errors">
+    Step-by-step error handling patterns for production agents.
+  </Card>
+  <Card title="Block Reasons" icon="list" href="/reference/block-reasons">
+    Full list of blockReason codes and their meanings.
+  </Card>
+  <Card title="MandateClient" icon="code" href="/sdk/mandate-client">
+    Low-level API client reference.
+  </Card>
+</CardGroup>

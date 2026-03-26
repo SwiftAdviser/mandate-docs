@@ -1,0 +1,67 @@
+---
+title: "Event"
+sidebarTitle: "event"
+description: "Post a broadcast transaction hash to Mandate for envelope verification after signing and broadcasting a raw-validated transaction."
+---
+
+## What does `event` do?
+
+The `event` command posts a transaction hash back to Mandate after you sign and broadcast a raw-validated transaction. Mandate's envelope verifier compares the on-chain transaction against the parameters you validated. If they match, the intent moves to `confirmed`. If they do not match, the circuit breaker trips.
+
+This command is required after every `validate --raw` or `transfer --raw` flow. Skip it and the intent stays in `broadcasted` state until it expires.
+
+## Usage
+
+```bash
+npx @mandate.md/cli event <intentId> --tx-hash 0xabc123...
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `intentId` | Yes | The intent ID returned by `validate` or `transfer` |
+
+## Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--tx-hash` | Yes | The broadcast transaction hash (`0x...`) |
+
+## Output
+
+```json
+{
+  "posted": true,
+  "intentId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+  "next": "Run: mandate status a1b2c3d4-5678-90ab-cdef-1234567890ab"
+}
+```
+
+The `next` field tells you (or your AI agent) to poll intent status for on-chain confirmation.
+
+## When to use this
+
+You need `event` in the raw validation flow, after step 2:
+
+1. `mandate validate --raw ...` or `mandate transfer --raw ...` (policy check)
+2. Sign and broadcast the transaction locally
+3. **`mandate event <intentId> --tx-hash 0x...`** (envelope verify)
+4. `mandate status <intentId>` (confirm on-chain)
+
+For preflight validation (the default, without `--raw`), you do not need `event`. Preflight flows do not require envelope verification.
+
+<Warning>
+If the on-chain transaction does not match the validated parameters, the envelope verifier trips the circuit breaker. All future transactions for this agent are blocked until the owner resets it in the dashboard.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Check Intent Status" icon="arrow-right" href="/cli/status">
+    Poll for on-chain confirmation after posting the event.
+  </Card>
+  <Card title="MandateClient.postEvent()" icon="arrow-right" href="/sdk/mandate-client">
+    The SDK method that powers this command.
+  </Card>
+</CardGroup>

@@ -1,0 +1,87 @@
+---
+title: "Circuit Breaker Tripped"
+sidebarTitle: "Circuit Breaker Tripped"
+description: "How to diagnose why a circuit breaker tripped, investigate the root cause, and reset it safely."
+---
+
+## What does a tripped circuit breaker mean?
+
+When an agent's circuit breaker is active, every validation request returns a `403` response with `blockReason: "circuit_breaker_active"`. All transactions are blocked until the owner resets it. There is no automatic reset. This is intentional: a circuit breaker trip is a security event that requires human investigation.
+
+## Step 1: Determine how it was tripped
+
+There are two ways a circuit breaker trips.
+
+### Manual trip
+
+The owner activated it from the dashboard. Check the audit log for a `circuit_breaker_activated` event with `actor: owner`. This is a deliberate action, typically to pause an agent during maintenance or after observing suspicious behavior.
+
+### Auto-trip (envelope mismatch)
+
+The envelope verifier detected that the on-chain transaction does not match the parameters validated by Mandate. This is serious. It means the agent broadcast a transaction with different parameters than what was approved.
+
+Check the audit log for a `circuit_breaker_auto_tripped` event. The event metadata includes:
+- The validated parameters (to, calldata, value, gas)
+- The on-chain parameters
+- Which fields differ
+
+## Step 2: Investigate the cause
+
+### If manually tripped
+
+Confirm with the owner why they tripped it. If it was for maintenance, you can reset it once the maintenance is complete.
+
+### If auto-tripped (envelope mismatch)
+
+This requires investigation. Common causes:
+
+**Nonce collision.** The agent validated a transaction, then sent a different transaction with the same nonce before broadcasting the validated one. The validated intent's nonce was consumed by the other transaction. When the agent broadcast the validated transaction, it used a new nonce, causing a mismatch.
+
+**Gas repricing.** The agent re-estimated gas after validation and broadcast with different gas parameters. The envelope verifier compares exact values.
+
+**Middleware modification.** A signing middleware or wallet provider modified the transaction parameters between validation and broadcast. Some wallet libraries add safety margins to gas estimates.
+
+**Malicious behavior.** The agent intentionally broadcast a different transaction than what was validated. This is the attack the circuit breaker is designed to catch.
+
+<Warning>
+If the mismatch is caused by malicious behavior, do not reset the circuit breaker. Review the agent's code and access permissions before taking any action.
+</Warning>
+
+## Step 3: Reset the circuit breaker
+
+Once you have identified and resolved the root cause:
+
+1. Open the Mandate dashboard at `https://app.mandate.md`.
+2. Navigate to the agent's detail page.
+3. Toggle the circuit breaker to inactive.
+4. Verify the agent can validate transactions again.
+
+You can also reset via the API:
+
+```bash
+curl -X POST https://app.mandate.md/api/agents/{agentId}/circuit-break \
+  -H "Authorization: Bearer <sanctum-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"active": false}'
+```
+
+## Step 4: Prevent future trips
+
+- Use the SDK's `MandateWallet` class, which handles the validate-sign-broadcast-postEvent flow atomically with consistent parameters.
+- Do not re-estimate gas between validation and broadcast.
+- Do not modify transaction parameters after validation.
+- Avoid sending other transactions between validation and broadcast if using sequential nonces.
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Circuit Breaker Security" icon="power-off" href="/security/circuit-breaker">
+    How the circuit breaker protects against unauthorized transactions.
+  </Card>
+  <Card title="Envelope Verification" icon="file-shield" href="/security/envelope-verification">
+    How Mandate verifies on-chain transactions match validated intents.
+  </Card>
+  <Card title="Dashboard Circuit Breaker" icon="toggle-on" href="/dashboard/circuit-breaker">
+    Manage circuit breaker state from the dashboard.
+  </Card>
+</CardGroup>

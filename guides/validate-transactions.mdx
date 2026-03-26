@@ -1,0 +1,219 @@
+---
+title: "Validate Transactions"
+sidebarTitle: "Validate Transactions"
+description: "Validate every agent transaction against Mandate's policy engine before signing. Learn the validate() call, handle all three outcomes, and follow best practices for production agents."
+---
+
+import InstallSdk from "/snippets/install-sdk.mdx";
+import ErrorHandling from "/snippets/error-handling.mdx";
+import FailSafe from "/snippets/fail-safe.mdx";
+import ReasonField from "/snippets/reason-field.mdx";
+import ValidateResponse from "/snippets/validate-response.mdx";
+import ApprovalFlow from "/snippets/approval-flow.mdx";
+
+## Why validate every transaction?
+
+Validation is Mandate's core contract. Every transaction your agent makes must pass through the `validate()` call before signing. This single API call runs your transaction against the policy engine's 14 sequential checks: circuit breaker status, schedule windows, address allowlists, blocked actions, per-transaction limits, daily and monthly quotas, risk screening, reputation scoring, reason scanning, and approval thresholds. If any check fails, the transaction is blocked with a specific `blockReason` code before your wallet is ever called.
+
+This is what separates Mandate from session keys. Session keys check whether a signature is valid. Mandate checks whether the transaction should happen at all, evaluating the intent, the recipient, the amount, and the stated reason. An agent that always validates before signing cannot be manipulated into executing a prompt-injected transfer, because the policy engine catches the anomaly before the private key is involved.
+
+<FailSafe />
+
+## How do you call validate()?
+
+The `validate()` method on `MandateClient` is the primary, recommended way to check a transaction. Pass a `PreflightPayload` with the action, amount, recipient, token, and reason. The policy engine evaluates the payload and returns one of three outcomes: allowed, blocked, or approval required.
+
+<CodeGroup>
+  ```typescript TypeScript
+  import { MandateClient, PolicyBlockedError, ApprovalRequiredError } from '@mandate/sdk';
+
+  const client = new MandateClient({
+    runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  });
+
+  try {
+    const result = await client.validate({
+      action: 'transfer',
+      amount: '50',
+      to: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+      token: 'USDC',
+      reason: 'Payment for API access - invoice #1234',
+    });
+
+    if (result.allowed) {
+      console.log('Proceed with transaction. Intent:', result.intentId);
+    }
+  } catch (err) {
+    if (err instanceof PolicyBlockedError) {
+      console.log('Blocked:', err.blockReason, err.declineMessage);
+    } else if (err instanceof ApprovalRequiredError) {
+      console.log('Needs approval:', err.intentId);
+      // Poll until the wallet owner decides
+      const status = await client.waitForApproval(err.intentId);
+      console.log('Decision:', status.status);
+    }
+  }
+  ```
+
+  ```bash CLI
+  npx @mandate/cli validate \
+    --action transfer \
+    --amount 50 \
+    --to 0x036CbD53842c5426634e7929541eC2318f3dCF7e \
+    --token USDC \
+    --reason "Payment for API access - invoice #1234"
+  ```
+
+  ```bash curl
+  curl -X POST https://app.mandate.md/api/validate \
+    -H "Authorization: Bearer $MANDATE_RUNTIME_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "action": "transfer",
+      "amount": "50",
+      "to": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "token": "USDC",
+      "reason": "Payment for API access - invoice #1234"
+    }'
+  ```
+</CodeGroup>
+
+## What fields does PreflightPayload accept?
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `action` | `string` | Yes | The type of transaction: `transfer`, `approve`, `swap`, or a custom action string |
+| `reason` | `string` | Yes | Why the agent wants to transact. Max 1,000 characters. Scanned for prompt injection. |
+| `amount` | `string` | No | Amount in USD or token units as a string |
+| `to` | `string` | No | Destination address (checked against allowlist if configured) |
+| `token` | `string` | No | Token symbol: `USDC`, `ETH`, `WETH`, etc. |
+| `chain` | `string` | No | Chain name or identifier, e.g. `base-sepolia` |
+
+<Note>
+While `amount`, `to`, `token`, and `chain` are technically optional, you should always include them when available. The more context the policy engine has, the more accurately it evaluates the transaction. Omitting fields means those policy checks are skipped.
+</Note>
+
+<ReasonField />
+
+## What are the three possible outcomes?
+
+Every `validate()` call results in exactly one of three outcomes. Your agent code must handle all three.
+
+### 1. Allowed
+
+The policy engine approved the transaction. `result.allowed` is `true`, and no errors are thrown. Proceed with signing and broadcasting.
+
+```typescript
+const result = await client.validate({
+  action: 'transfer',
+  amount: '25',
+  to: '0xRecipientAddress',
+  token: 'USDC',
+  reason: 'Weekly subscription payment to vendor',
+});
+
+// result.allowed === true
+// result.intentId contains the tracking ID
+// Sign and broadcast the transaction
+```
+
+### 2. Blocked
+
+The transaction violates a policy rule. The SDK throws a `PolicyBlockedError` (HTTP 422) with a `blockReason` code and a human-readable `declineMessage`. Do not retry the same transaction. The policy must be updated in the [dashboard](/dashboard/policy-builder) before it can pass.
+
+```typescript
+try {
+  await client.validate({ /* ... */ });
+} catch (err) {
+  if (err instanceof PolicyBlockedError) {
+    console.log(err.blockReason);     // e.g. "per_tx_limit_exceeded"
+    console.log(err.declineMessage);  // "Transaction exceeds $100 per-tx limit"
+    console.log(err.detail);          // Extended explanation
+  }
+}
+```
+
+Common block reasons include `per_tx_limit_exceeded`, `daily_limit_exceeded`, `address_not_in_allowlist`, `action_blocked`, `reason_blocked`, and `schedule_outside_window`. See [Block Reasons](/reference/block-reasons) for the full list of 12 codes.
+
+### 3. Approval required
+
+The transaction is within policy limits but exceeds the approval threshold, or the action type requires manual sign-off. The SDK throws an `ApprovalRequiredError` (HTTP 202) with an `intentId`. The wallet owner receives a notification and can approve or reject in the [Approvals dashboard](/dashboard/approvals).
+
+<ApprovalFlow />
+
+<ValidateResponse />
+
+## How does validate() differ from raw validation?
+
+Mandate supports two validation flows. The `validate()` method (also called preflight) is the primary, recommended approach for all new integrations.
+
+| Aspect | `validate()` (recommended) | `rawValidate()` (deprecated) |
+|--------|---------------------------|------------------------------|
+| Input | Action, amount, recipient, reason | Full EVM tx params + intentHash |
+| Gas estimation | Not needed | Required before calling |
+| Use case | All agents (custodial and non-custodial) | Legacy self-custodial flows |
+| Complexity | Low: 5-6 fields | High: 10+ fields + hash computation |
+| Post-call steps | Sign and broadcast | Sign, broadcast, and `postEvent()` |
+
+<Info>
+**Deprecated.** `rawValidate()` is kept for backward compatibility. Use `validate()` for all new code. If you need the raw flow for a self-custodial wallet, see [MandateClient.rawValidate()](/sdk/mandate-client#clientrawvalidatepayload).
+</Info>
+
+## What are the best practices for production agents?
+
+### Always include a descriptive reason
+
+The `reason` field is not optional filler. It powers three critical systems: the audit trail, prompt injection detection, and policy insights. Write a specific, honest description. Include invoice numbers, vendor names, or task context when available.
+
+```typescript
+// Good: specific and actionable
+reason: 'Paying Acme Corp invoice #4821 for March API usage - $50 USDC'
+
+// Bad: vague and unhelpful
+reason: 'transfer'
+```
+
+### Handle all error types
+
+Your agent must handle `PolicyBlockedError`, `ApprovalRequiredError`, `CircuitBreakerError`, and `RiskBlockedError`. Missing any one of these creates an unhandled rejection that could crash your agent or, worse, silently skip validation.
+
+<ErrorHandling />
+
+### Never skip validation
+
+Every transaction path in your agent must include a `validate()` call. This includes retries, fallback logic, and edge cases. If your agent has a code path that signs a transaction without validating first, that path is a security hole.
+
+<Warning>
+If the Mandate API is unreachable (network error, timeout, 5xx), block the transaction. Do not fall back to unvalidated execution. Retry the validation call with exponential backoff. The fail-safe rule: when in doubt, block.
+</Warning>
+
+### Validate before gas estimation
+
+Call `validate()` before estimating gas or preparing transaction parameters. If the policy engine blocks the transaction, you save the gas estimation RPC call. If it requires approval, you avoid preparing a transaction that may never execute.
+
+### Use the SDK, not raw HTTP
+
+The SDK handles error parsing, typed exceptions, retry logic, and response validation. Raw HTTP calls require you to parse error codes, match status codes to error classes, and handle edge cases manually. Use `MandateClient` or `MandateWallet` unless you are working in a language without an SDK.
+
+## How do you audit validated transactions?
+
+Every `validate()` call creates an intent record in Mandate's audit log, regardless of the outcome. The wallet owner can view all intents (allowed, blocked, and pending approval) in the [Audit Log](/dashboard/audit-log) dashboard page. Each entry includes the action, amount, recipient, reason, policy evaluation trace, and final decision.
+
+For programmatic access, use `client.getStatus(intentId)` to retrieve the current state of any intent. The response includes the transaction hash, block number, gas used, and decoded action summary for confirmed transactions.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Handle Approvals" icon="clock" href="/guides/handle-approvals">
+    Wait for human decisions with polling, timeouts, and callback patterns.
+  </Card>
+  <Card title="Handle Errors" icon="triangle-exclamation" href="/guides/handle-errors">
+    Recovery patterns for all 5 error classes and 12 block reason codes.
+  </Card>
+  <Card title="MandateClient Reference" icon="code" href="/sdk/mandate-client">
+    Full API reference for validate(), rawValidate(), postEvent(), and polling methods.
+  </Card>
+  <Card title="Block Reasons" icon="ban" href="/reference/block-reasons">
+    Complete table of block reason codes with descriptions and resolution steps.
+  </Card>
+</CardGroup>

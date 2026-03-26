@@ -1,0 +1,86 @@
+---
+title: "Audit Log"
+sidebarTitle: "Audit Log"
+description: "Browse the immutable transaction history for all agents with filters, status colors, and explorer links in the Mandate dashboard."
+---
+
+## What is the audit log?
+
+The audit log is an immutable record of every transaction intent processed by Mandate. Every validation, approval, broadcast, and confirmation is recorded here. You cannot edit or delete entries. Use the audit log to investigate incidents, verify agent behavior, and satisfy compliance requirements.
+
+## Filters
+
+Narrow the log to find specific transactions using two filter dimensions:
+
+### Status filter
+
+| Status | Meaning |
+|--------|---------|
+| **confirmed** | Transaction confirmed on-chain. |
+| **failed** | Transaction failed (rejected by policy, on-chain revert, or envelope mismatch). |
+| **broadcasted** | Transaction sent to the network, awaiting confirmation. |
+| **reserved** | Intent validated but not yet signed or broadcast. |
+| **approval_pending** | Waiting for manual approval in the [approval queue](/dashboard/approvals). |
+| **preflight** | Custodial wallet preflight check completed. |
+| **expired** | Approval or reservation timed out before action was taken. |
+
+### Action filter
+
+| Action | Meaning |
+|--------|---------|
+| **transfer** | ERC-20 token transfer. |
+| **approve** | ERC-20 allowance approval. |
+| **native_transfer** | Native token (ETH, etc.) transfer. |
+| **swap** | DEX swap operation. |
+| **unknown** | Unrecognized calldata. |
+
+Combine both filters to drill down, for example: all failed transfers, or all confirmed swaps.
+
+## Columns
+
+Each row in the audit log displays:
+
+| Column | Description |
+|--------|-------------|
+| **Action** | Transaction type with an icon. |
+| **Amount** | Token amount and USD equivalent. |
+| **To** | Destination address, shortened. |
+| **Status** | Current intent state with color coding. |
+| **Risk level** | SAFE, MEDIUM, HIGH, or CRITICAL badge. |
+| **Time** | When the intent was created (relative and absolute). |
+| **Tx hash** | Link to the block explorer for confirmed transactions. |
+
+## Status colors
+
+Quick visual identification of transaction outcomes:
+
+- **Green**: confirmed (successful on-chain)
+- **Red**: failed (policy block, revert, or mismatch)
+- **Yellow**: approved (awaiting broadcast)
+- **Orange**: blocked (policy engine rejected)
+
+## Pagination and export
+
+The audit log paginates results for performance. Navigate pages with the controls at the bottom of the list. For offline analysis or reporting, use the export feature to download transaction history as CSV.
+
+<Tip>
+Export filtered results to share specific transaction sets with compliance teams or auditors.
+</Tip>
+
+## Investigating incidents
+
+When a transaction fails or the circuit breaker trips, start in the audit log. Filter by the agent and status `failed` to see what went wrong. Click a row to expand details including the full `blockReason`, policy version that evaluated the transaction, and envelope verification results.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Intent States" icon="diagram-project" href="/reference/intent-states">
+    Complete state machine reference for transaction intents.
+  </Card>
+  <Card title="Block Reasons" icon="ban" href="/reference/block-reasons">
+    Every blockReason code and what triggers it.
+  </Card>
+  <Card title="Dashboard Overview" icon="gauge" href="/dashboard/overview">
+    Return to the dashboard home page.
+  </Card>
+</CardGroup>

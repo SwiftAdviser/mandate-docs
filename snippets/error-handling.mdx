@@ -1,0 +1,54 @@
+The SDK throws typed errors you can catch with `instanceof`:
+
+```typescript
+import {
+  MandateClient,
+  PolicyBlockedError,
+  CircuitBreakerError,
+  ApprovalRequiredError,
+  RiskBlockedError,
+  MandateError,
+} from '@mandate/sdk';
+
+const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY! });
+
+try {
+  const result = await client.validate({
+    action: 'transfer',
+    amount: '100',
+    to: '0xRecipientAddress',
+    token: 'USDC',
+    reason: 'Payment for API access',
+  });
+} catch (err) {
+  if (err instanceof PolicyBlockedError) {
+    // Transaction violates policy rules
+    console.log(err.blockReason);     // e.g. "per_tx_limit_exceeded"
+    console.log(err.detail);          // Human-readable explanation
+    console.log(err.declineMessage);  // Message to show the user
+  } else if (err instanceof CircuitBreakerError) {
+    // Agent is emergency-stopped. All transactions blocked.
+    // Contact the agent owner to reset via dashboard.
+  } else if (err instanceof ApprovalRequiredError) {
+    // Transaction needs human approval before proceeding
+    console.log(err.intentId);   // Use to poll for approval
+    console.log(err.approvalId); // Approval queue entry
+  } else if (err instanceof RiskBlockedError) {
+    // Address or transaction flagged by risk scanner
+    console.log(err.blockReason); // e.g. "aegis_critical_risk"
+  } else if (err instanceof MandateError) {
+    // Generic API error
+    console.log(err.statusCode, err.message);
+  }
+}
+```
+
+| Error Class | HTTP Status | When it fires |
+|-------------|-------------|---------------|
+| `PolicyBlockedError` | 422 | Transaction violates a policy rule (limits, allowlist, schedule, etc.) |
+| `CircuitBreakerError` | 403 | Agent is emergency-stopped by owner |
+| `ApprovalRequiredError` | 202 | Amount exceeds approval threshold, or action/selector requires approval |
+| `RiskBlockedError` | 422 | Address flagged as critical risk by Aegis scanner |
+| `MandateError` | any | Base class for all Mandate errors |
+
+See [Error Classes](/sdk/errors) for full details and recovery patterns.

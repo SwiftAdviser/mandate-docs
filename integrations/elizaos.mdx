@@ -1,0 +1,92 @@
+---
+title: "ElizaOS Plugin"
+sidebarTitle: "ElizaOS"
+description: "Add Mandate policy-enforced token transfers and payments to your ElizaOS agent with the @mandate.md/eliza-plugin."
+---
+
+## What is the ElizaOS plugin?
+
+The `@mandate.md/eliza-plugin` package registers Mandate actions and providers with your ElizaOS agent runtime. It adds three actions (transfer, x402Pay, sendEth) and one provider (walletStateProvider) that gives the agent context about its wallet address and chain.
+
+## Installation
+
+```bash
+bun add @mandate.md/eliza-plugin @elizaos/core
+```
+
+`@elizaos/core` is a peer dependency (>=0.1.0).
+
+## Usage
+
+```typescript
+import { mandatePlugin } from '@mandate.md/eliza-plugin';
+
+const agent = new AgentRuntime({
+  plugins: [mandatePlugin],
+  // ... other configuration
+});
+```
+
+That registers all actions and providers. The plugin reads configuration from runtime settings or environment variables.
+
+## Environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MANDATE_RUNTIME_KEY` | Yes | Mandate runtime key (`mndt_live_...` or `mndt_test_...`) |
+| `MANDATE_PRIVATE_KEY` | Yes | Agent wallet private key (hex, `0x` prefix) |
+| `MANDATE_CHAIN_ID` | No | EVM chain ID. Defaults to `84532` (Base Sepolia). |
+
+You can set these as environment variables or pass them through ElizaOS runtime settings via `runtime.getSetting()`.
+
+## Actions
+
+| Action name | Description |
+|-------------|-------------|
+| `MANDATE_TRANSFER` | Transfer ERC20 tokens with policy enforcement. Accepts `to`, `amount`, `tokenAddress`. Similes: `TRANSFER_TOKENS`, `SEND_TOKENS`, `ERC20_TRANSFER`. |
+| `MANDATE_X402_PAY` | Pay for an x402-gated resource. Accepts `url`. Similes: `X402_PAY`, `PAY_API`, `PAY_FOR_CONTENT`. |
+| `MANDATE_SEND_ETH` | Send native ETH with policy enforcement. Accepts `to`, `valueWei`. Similes: `SEND_ETH`, `TRANSFER_ETH`, `SEND_NATIVE`. |
+
+Each action validates with the Mandate API, signs locally with the private key, and broadcasts. The private key never leaves the agent process.
+
+## Providers
+
+| Provider | Description |
+|----------|-------------|
+| `walletStateProvider` | Returns the wallet address and chain ID as a string. Gives the agent context for conversations about its wallet state. |
+
+Example output: `"Mandate wallet: 0x1234...abcd on chain 84532. Policy enforcement: active."`
+
+## Error handling
+
+Actions use ElizaOS callbacks to report errors. The handler returns `false` on policy blocks and approval requirements, with a descriptive message in the callback.
+
+```typescript
+// Policy block callback:
+// text: "Transfer blocked by Mandate policy: daily_limit_exceeded"
+// content: { blocked: true, reason: "daily_limit_exceeded" }
+
+// Approval required callback:
+// text: "Transfer requires approval. IntentId: int_abc123. ApprovalId: apr_xyz789"
+// content: { requiresApproval: true, intentId: "int_abc123", approvalId: "apr_xyz789" }
+```
+
+The `content` object in the callback gives your agent structured data to decide what to do next: retry later, reduce the amount, or prompt the user to approve in the [dashboard](/dashboard/approvals).
+
+<Tip>
+  Each action's `validate` method checks that `MANDATE_RUNTIME_KEY` is set. If it returns `false`, ElizaOS skips the action entirely. Make sure the env var is configured before starting the agent.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Integrations Overview" icon="grid-2" href="/integrations/overview">
+    Compare all supported agent frameworks and pick the right one.
+  </Card>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Understand the full validation flow from preflight to confirmation.
+  </Card>
+  <Card title="Handle Errors" icon="triangle-exclamation" href="/guides/handle-errors">
+    Catch and respond to every Mandate error type.
+  </Card>
+</CardGroup>

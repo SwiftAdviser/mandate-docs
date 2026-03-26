@@ -1,0 +1,144 @@
+---
+title: "API Reference Overview"
+sidebarTitle: "Overview"
+description: "Base URL, authentication, error format, and endpoint summary for the Mandate REST API."
+---
+
+## Base URL
+
+All API requests use this base URL:
+
+```
+https://app.mandate.md/api
+```
+
+## Authentication
+
+The Mandate API uses two authentication schemes depending on the caller.
+
+### Agent authentication (RuntimeKeyAuth)
+
+Agents authenticate with a runtime key in the `Authorization` header:
+
+```bash
+Authorization: Bearer mndt_test_abc123...
+```
+
+Runtime keys use prefixes to enforce environment separation:
+- `mndt_test_*` for testnet (Sepolia, Base Sepolia)
+- `mndt_live_*` for mainnet (Ethereum, Base)
+
+The runtime key is issued during agent registration and stored in `~/.mandate/credentials.json`. You can regenerate it from the dashboard if compromised.
+
+### Dashboard authentication (Sanctum)
+
+Dashboard users authenticate via GitHub OAuth. The Laravel session and Sanctum token are managed automatically by the frontend. Dashboard API endpoints require an active session or a Sanctum token.
+
+## Request format
+
+All requests use JSON:
+
+```bash
+Content-Type: application/json
+```
+
+## Error format
+
+Every error response returns JSON. The format depends on the error type.
+
+**Policy block:**
+```json
+{
+  "allowed": false,
+  "blockReason": "per_tx_limit_exceeded",
+  "blockDetail": "$500.00 exceeds $100/tx limit",
+  "declineMessage": "This transaction exceeds your per-transaction limit of $100."
+}
+```
+
+**General error:**
+```json
+{
+  "error": "Invalid or missing runtime key"
+}
+```
+
+| Field | Present On | Description |
+|-------|-----------|-------------|
+| `error` | All errors | Human-readable error message |
+| `allowed` | Validation responses | `true` if passed, `false` if blocked |
+| `blockReason` | Policy blocks (422), circuit breaker (403) | Machine-readable reason code |
+| `blockDetail` | Policy blocks | Specific detail about the violation |
+| `declineMessage` | Policy blocks | Adversarial counter-message for prompt injection defense |
+
+See [Error Codes](/reference/error-codes) for the full HTTP status reference and [Block Reasons](/reference/block-reasons) for all `blockReason` values.
+
+## Endpoint groups
+
+### Agent API (7 endpoints)
+
+These endpoints are called by agents using RuntimeKeyAuth.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/agents/register` | Register a new agent (no auth required) |
+| `POST` | `/activate` | Set the agent's EVM address after registration |
+| `POST` | `/validate` | Action-based validation (recommended) |
+| `POST` | `/validate/raw` | Raw EVM validation with intent hash (deprecated) |
+| `POST` | `/intents/{intentId}/events` | Post transaction hash after broadcast |
+| `GET` | `/intents/{intentId}/status` | Poll intent state |
+| `POST` | `/risk/check` | Screen an address against the risk database |
+
+### Dashboard API (10+ endpoints)
+
+These endpoints are called by the dashboard frontend using Sanctum authentication.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/agents/claim` | Link an unclaimed agent to your account |
+| `POST` | `/agents/create` | Create a new agent directly |
+| `PUT` | `/agents/{agentId}` | Update agent configuration |
+| `DELETE` | `/agents/{agentId}` | Delete an agent |
+| `POST` | `/agents/{agentId}/regenerate-key` | Issue a new runtime key |
+| `GET` | `/agents/{agentId}/policies` | Get the agent's current policy |
+| `POST` | `/agents/{agentId}/policies` | Create or update the policy |
+| `POST` | `/agents/{agentId}/circuit-break` | Toggle the circuit breaker |
+| `GET` | `/approvals` | List pending approvals |
+| `POST` | `/approvals/{id}/decide` | Approve or reject a pending transaction |
+
+### Open endpoint (1)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/agents/register` | No authentication required. Returns `runtimeKey`, `agentId`, and `claimUrl`. |
+
+## Rate limiting
+
+The API enforces per-agent rate limits. See [Rate Limits](/reference/rate-limits) for default limits per endpoint category and retry strategies.
+
+Rate limit headers are included in every response:
+- `X-RateLimit-Limit`
+- `X-RateLimit-Remaining`
+- `Retry-After` (on 429 responses only)
+
+## Interactive playground
+
+The API reference pages include an interactive playground powered by the OpenAPI specification. You can test endpoints directly from the docs using your runtime key. Enter your `mndt_test_*` key to test against the Mandate API without writing code.
+
+<Warning>
+Never use a `mndt_live_*` key in the playground. Use testnet keys for testing.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Register Agent" icon="user-plus" href="/api-reference/register">
+    Create your first agent via the API.
+  </Card>
+  <Card title="Validate Transaction" icon="shield-check" href="/api-reference/validate">
+    Run a validation check against the policy engine.
+  </Card>
+  <Card title="Error Codes" icon="circle-exclamation" href="/reference/error-codes">
+    Full HTTP status code reference.
+  </Card>
+</CardGroup>

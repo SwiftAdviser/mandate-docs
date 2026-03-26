@@ -1,0 +1,83 @@
+---
+title: "Threat Model"
+sidebarTitle: "Threat Model"
+description: "The threats Mandate protects against and the defense layers that stop them."
+---
+
+A **threat model** is a structured analysis of who might attack your system, how they would do it, and what defenses stop them. Mandate's threat model covers the unique risks that AI agents face when controlling crypto wallets.
+
+## What threats does Mandate protect against?
+
+Mandate defends AI agent wallets against six categories of attack. Each category targets a different part of the agent-to-blockchain pipeline, from the prompt layer down to on-chain execution.
+
+| Threat | Attack Vector | Mandate Defense |
+|--------|--------------|-----------------|
+| Prompt injection | Malicious input tricks agent into unauthorized transfers | Reason scanner (18+ patterns + LLM judge) |
+| Social engineering | Attacker convinces agent to send funds via chat | Reason field audit + approval workflows |
+| Policy bypass | Agent attempts to circumvent spending limits | Server-side policy enforcement (not client-side) |
+| Envelope swapping | Modified tx params between validation and signing | Intent hash verification + envelope verifier |
+| Compromised infrastructure | Mandate API or agent server compromised | Non-custodial model (no keys on server) |
+| Rug pull | Interacting with malicious contracts | Address risk screening (Aegis) + allowlists |
+
+## How does prompt injection work against agents?
+
+Prompt injection is the most common attack vector against AI agents with wallet access. An attacker embeds instructions inside user input, a webpage, or an API response that the agent processes. These instructions tell the agent to transfer funds to an attacker-controlled address.
+
+Mandate's reason scanner catches this at the validation layer. Every transaction includes a `reason` field that describes why the agent wants to send funds. The scanner runs 18+ hardcoded regex patterns against this field, then passes suspicious reasons to an LLM judge for nuanced analysis. Transactions flagged as injection attempts are blocked before they reach the blockchain.
+
+## How does social engineering target AI agents?
+
+Social engineering against AI agents works differently than against humans, but the principle is the same. An attacker engages the agent in conversation and gradually convinces it to send funds. The attacker might pose as a legitimate counterparty, claim an emergency, or construct a scenario where the transfer seems reasonable.
+
+Mandate catches this through two mechanisms. The reason field creates an auditable record of why the agent made each transaction. Approval workflows route high-value or suspicious transactions to the human owner for manual review. The combination means even a successfully manipulated agent cannot drain funds without human oversight.
+
+## How does server-side enforcement prevent policy bypass?
+
+Client-side policy enforcement is fundamentally broken for AI agents. If the agent evaluates its own policies, a compromised or manipulated agent can simply skip the check. Mandate enforces all policies server-side.
+
+The agent sends every transaction to Mandate's API before execution. The PolicyEngineService evaluates spend limits, allowlists, time schedules, and selector restrictions on the server. The agent receives an approved or denied response. There is no client-side "honor system" to bypass.
+
+## How does envelope verification stop tx swapping?
+
+Envelope swapping targets the gap between validation and broadcast. An attacker (or a compromised agent) validates a transaction with safe parameters, then broadcasts a different transaction with a higher value or different destination.
+
+Mandate closes this gap with intent hashes. When the agent calls `rawValidate()`, Mandate stores the exact transaction parameters and computes a `keccak256` hash. After broadcast, the envelope verifier fetches the on-chain transaction and compares it against the stored parameters. A mismatch trips the circuit breaker and blocks all future transactions.
+
+## How does the non-custodial model limit blast radius?
+
+Mandate never holds private keys. The agent's signing key stays on the agent's infrastructure. If Mandate's API server is compromised, the attacker gains the ability to approve transactions, but cannot sign or broadcast them. If the agent's server is compromised, the attacker can sign transactions, but Mandate's policy engine still blocks unauthorized ones.
+
+This separation means a single point of compromise cannot drain funds. An attacker needs to compromise both Mandate and the agent simultaneously.
+
+## What does Mandate NOT protect against?
+
+Mandate is not a silver bullet. You still need to handle these threats independently:
+
+- **Private key theft from the agent itself.** If an attacker extracts the agent's signing key, they can bypass Mandate entirely by broadcasting transactions directly. Use proper key management: HSMs, secure enclaves, or encrypted storage.
+- **Smart contract vulnerabilities in destination contracts.** Mandate validates that a transaction is authorized, not that the destination contract is safe. A policy-approved transfer to a buggy DeFi contract can still lose funds.
+- **Network-level attacks (MEV, front-running).** Mandate operates at the validation layer, not the mempool layer. Use Flashbots or private mempools for MEV protection.
+
+## How do the defense layers work together?
+
+Mandate uses defense in depth. Each layer catches attacks that slip through the previous one:
+
+1. **Reason scanner** catches prompt injection and social engineering at the input layer.
+2. **Policy engine** enforces spend limits, allowlists, and schedules at the authorization layer.
+3. **Risk scanning** flags dangerous destination addresses at the target layer.
+4. **Approval workflows** route suspicious transactions to humans at the oversight layer.
+5. **Envelope verification** catches tx tampering at the execution layer.
+6. **Circuit breaker** stops all activity when something goes wrong at the emergency layer.
+
+Even if an attacker bypasses the reason scanner and the policy engine, risk scanning or envelope verification can still catch the attack. No single layer is a single point of failure.
+
+<CardGroup cols={3}>
+  <Card title="Prompt Injection" icon="shield-halved" href="/security/prompt-injection">
+    How Mandate detects manipulation attempts
+  </Card>
+  <Card title="Circuit Breaker" icon="circle-stop" href="/security/circuit-breaker">
+    Emergency stop for compromised agents
+  </Card>
+  <Card title="Non-Custodial Model" icon="key" href="/concepts/non-custodial">
+    Why Mandate never holds private keys
+  </Card>
+</CardGroup>

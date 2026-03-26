@@ -1,0 +1,81 @@
+---
+title: "Fail-Safe Rules"
+sidebarTitle: "Fail-Safe Rules"
+description: "The five non-negotiable fail-safe rules every Mandate integration must follow. Fail-closed by design: if the API is unreachable, the transaction does not execute."
+---
+
+import FailSafe from "/snippets/fail-safe.mdx";
+
+## What are the fail-safe rules?
+
+Every Mandate integration, whether SDK-based, hook-based, or raw HTTP, must enforce five rules. These rules exist to prevent unvalidated transactions from reaching the blockchain. Breaking any of them creates an unguarded execution path.
+
+<FailSafe />
+
+These rules are not suggestions. They are the contract between your agent and the wallet owner. Violating rule 2 or 3 means a compromised or malfunctioning agent can drain funds without policy enforcement.
+
+## What happens when the Mandate API is unreachable?
+
+The agent MUST NOT execute the transaction. This is the single most important rule in the entire integration. No fallback to unvalidated execution. No "try once and skip." No grace period.
+
+When the API returns a network error, timeout, or 5xx status, your agent should block the transaction and either retry with backoff or alert the operator. Here is the recommended pattern:
+
+```typescript
+import { MandateError } from '@mandate/sdk';
+
+try {
+  const result = await client.validate({ ... });
+  // Validation passed. Proceed with signing and broadcast.
+} catch (err) {
+  if (err instanceof MandateError) {
+    // Policy error, circuit breaker, approval required, or risk block.
+    // Handle each subclass per /sdk/errors
+    console.error(`Mandate blocked: ${err.blockReason}`);
+  } else {
+    // Network error, DNS failure, timeout, 5xx, or unexpected exception.
+    // DO NOT execute the transaction.
+    console.error('Mandate API unreachable. Transaction blocked for safety.');
+    // Retry after delay, or alert the operator.
+  }
+}
+```
+
+The outer `else` branch is the fail-safe. It catches every non-Mandate exception: `fetch` failures, TLS errors, response parsing issues, and anything else that prevents a clean policy decision. In all these cases, the correct action is to block.
+
+## Why fail-closed?
+
+An agent without policy enforcement is a liability. The risk calculation is asymmetric:
+
+- A missed transaction can be retried seconds later when the API recovers.
+- A stolen or unauthorized transaction cannot be reversed on-chain.
+
+Mandate enforces fail-closed by design. The policy engine returns an explicit "allowed" signal for every transaction. The absence of that signal means "blocked." There is no implicit allow, no default pass-through, and no optimistic execution.
+
+This design mirrors how banking systems handle authorization. If the card network is unreachable, the terminal declines the payment. It does not charge the card and hope for the best.
+
+## How do plugins implement fail-safe?
+
+The [Claude Code plugin](/integrations/claude-code) and [OpenClaw plugin](/integrations/openclaw) implement fail-safe automatically. Both plugins intercept financial tool calls and gate them through the Mandate API before execution. If the API is unreachable:
+
+- **Claude Code plugin**: The `PreToolUse` hook blocks the Bash or MCP tool call and returns an error message to the agent. The transaction never reaches the shell.
+- **OpenClaw plugin**: The safety-net hook rejects the tool call with a structured error. The agent receives a clear block reason.
+
+If you build a custom integration using the SDK or raw HTTP, you are responsible for implementing fail-safe yourself. Follow the code pattern above and test it by simulating network failures during development.
+
+<Tip>
+Test your fail-safe by pointing the SDK at an invalid URL (`MANDATE_API_URL=https://localhost:1`). Your agent should block the transaction, not crash or proceed without validation.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Handle Errors" icon="shield-check" href="/guides/handle-errors">
+    Error handling patterns for every SDK error class in production agents.
+  </Card>
+  <Card title="Threat Model" icon="lock" href="/security/threat-model">
+    Understand the attack vectors Mandate defends against.
+  </Card>
+  <Card title="Non-Custodial Architecture" icon="key" href="/concepts/non-custodial">
+    How Mandate enforces policy without holding private keys.
+  </Card>
+</CardGroup>

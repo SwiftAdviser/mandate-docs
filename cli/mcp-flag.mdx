@@ -1,0 +1,107 @@
+---
+title: "MCP Server Mode (--mcp)"
+sidebarTitle: "--mcp"
+description: "Start the Mandate CLI as an MCP stdio server so AI assistants like Claude Desktop and Codex CLI can validate transactions through tool calls."
+---
+
+## What does `--mcp` do?
+
+The `--mcp` flag starts the CLI as a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) stdio server. AI assistants connect to it over standard input/output and call Mandate commands as structured tools. No HTTP server, no port binding: the transport is stdio.
+
+```bash
+npx @mandate.md/cli --mcp
+```
+
+## Exposed tools
+
+The MCP server exposes two tools:
+
+| Tool | Description |
+|------|-------------|
+| `search` | Look up validation schemas, command usage, and examples. Read-only, no auth needed. |
+| `execute` | Call any Mandate CLI command (validate, transfer, event, status, approve). Requires a runtime key. |
+
+The `search` tool helps agents discover how to use Mandate before they have credentials. The `execute` tool runs real commands against the API.
+
+## Client configuration
+
+### Claude Desktop
+
+Add this to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mandate": {
+      "command": "npx",
+      "args": ["@mandate.md/cli", "--mcp"],
+      "env": {
+        "MANDATE_RUNTIME_KEY": "mndt_test_abc123..."
+      }
+    }
+  }
+}
+```
+
+On macOS, this file lives at `~/Library/Application Support/Claude/claude_desktop_config.json`. On Windows, it is at `%APPDATA%\Claude\claude_desktop_config.json`.
+
+### Codex CLI
+
+Add this to your `.codex/config.toml`:
+
+```toml
+[mcp.mandate]
+transport = "stdio"
+command = ["npx", "@mandate.md/cli", "--mcp"]
+```
+
+Set the runtime key in your shell environment:
+
+```bash
+export MANDATE_RUNTIME_KEY="mndt_test_abc123..."
+```
+
+### Claude Code
+
+Claude Code can connect to the MCP server directly:
+
+```bash
+claude mcp add mandate -- npx @mandate.md/cli --mcp
+```
+
+Or use the dedicated [Claude Code plugin](/integrations/claude-code) for two-phase enforcement with hooks.
+
+## How it works
+
+When an AI assistant sends a tool call to the MCP server, the server:
+
+1. Parses the tool name and arguments
+2. Routes to the corresponding CLI command
+3. Authenticates using the runtime key from environment or `~/.mandate/credentials.json`
+4. Returns the result as structured JSON
+
+The assistant sees the same output as running the CLI directly. Error responses include typed error codes and block reasons.
+
+## When to use MCP vs the CLI directly
+
+Use `--mcp` when your AI assistant supports MCP natively (Claude Desktop, Codex CLI, Claude Code). The assistant gets structured tool definitions, typed inputs, and typed outputs without parsing CLI text.
+
+Use the CLI directly when you are scripting, running in CI, or working from a terminal. The output is the same JSON.
+
+<Note>
+For a cloud-hosted MCP server on Cloudflare Workers (no local CLI needed), see the [MCP Server integration](/integrations/mcp-server). It runs as a deployed service rather than a local process.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cloud MCP Server" icon="arrow-right" href="/integrations/mcp-server">
+    Deploy Mandate as a hosted MCP server on Cloudflare Workers.
+  </Card>
+  <Card title="CLI Overview" icon="arrow-right" href="/cli/overview">
+    Full list of commands and global options.
+  </Card>
+  <Card title="Agent Discovery" icon="arrow-right" href="/cli/llms-flag">
+    Use --llms for lightweight command discovery without MCP.
+  </Card>
+</CardGroup>

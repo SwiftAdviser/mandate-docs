@@ -1,0 +1,77 @@
+---
+title: "Approvals"
+sidebarTitle: "Approvals"
+description: "Review, approve, or reject pending agent transactions from the Mandate dashboard approval queue."
+---
+
+## What is the approval queue?
+
+The approval queue shows all transactions that require your manual review before the agent can proceed. Transactions land here when they match an approval rule in the agent's [policy](/dashboard/policy-builder): specific selectors, actions, or amounts above a USD threshold.
+
+## Approval list
+
+The page displays a paginated list of pending approvals. Each card contains the information you need to make a decision at a glance.
+
+### Card fields
+
+| Field | Description |
+|-------|-------------|
+| **Agent name** | The agent requesting approval, with a pulse indicator showing it is waiting. |
+| **Amount (USD)** | Dollar value of the transaction. |
+| **Action** | Transaction type: transfer, approve, swap, or native_transfer. |
+| **To address** | Destination address, shortened with full address on hover. |
+| **Reason** | The agent's stated reason for the transaction. |
+| **Risk level** | Badge showing SAFE, MEDIUM, HIGH, or CRITICAL. |
+| **Time remaining** | Countdown timer. Approval requests expire if not acted on. |
+
+## Risk level badges
+
+The policy engine assigns a risk level to each transaction based on amount, destination reputation, and pattern analysis:
+
+| Badge | Meaning |
+|-------|---------|
+| **SAFE** | Low value, known destination, routine pattern. |
+| **MEDIUM** | Moderate value or slightly unusual pattern. |
+| **HIGH** | High value or unfamiliar destination. Review carefully. |
+| **CRITICAL** | Very high value, new address, or anomalous behavior. Investigate before approving. |
+
+## Approve or reject
+
+Each card has two action buttons:
+
+- **Approve**: moves the intent to `approved` state. The agent can proceed with signing and broadcasting.
+- **Reject**: blocks the transaction. The intent moves to `failed` state.
+
+Both actions accept an optional note. Use notes to document your reasoning, especially for high-risk approvals or rejections.
+
+<Tip>
+Add notes to rejections so the agent operator understands why the transaction was denied. Notes appear in the audit log.
+</Tip>
+
+## Notifications
+
+You receive notifications for new pending approvals through your configured channels:
+
+- **Telegram**: instant message via @mandatemd_bot
+- **Slack**: webhook notification to your channel
+- **Custom webhook**: POST to your endpoint
+
+Configure notification channels on the [Notifications](/dashboard/notifications) page to avoid missing time-sensitive approvals.
+
+## Expiration
+
+Approval requests have a time limit. If you do not act before the countdown reaches zero, the intent transitions to `expired` state. The agent must submit a new transaction request. This prevents stale approvals from being acted on after conditions change.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Handle Approvals (Guide)" icon="book-open" href="/guides/handle-approvals">
+    Best practices for reviewing and processing approval requests.
+  </Card>
+  <Card title="Approval Triggers" icon="bell" href="/reference/approval-triggers">
+    Complete list of conditions that route transactions to the approval queue.
+  </Card>
+  <Card title="Notifications" icon="envelope" href="/dashboard/notifications">
+    Set up Telegram, Slack, and webhook alerts for new approvals.
+  </Card>
+</CardGroup>

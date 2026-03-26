@@ -1,0 +1,153 @@
+---
+title: "Glossary"
+sidebarTitle: "Glossary"
+description: "Definitions of key Mandate terms: policies, intents, validation flows, SDK classes, and security mechanisms."
+---
+
+## A
+
+**Allowlist**
+
+A list of approved destination addresses in a [policy](/concepts/policies). Transactions targeting addresses not on the list are blocked with `address_not_allowed`.
+
+**Approval queue**
+
+The set of pending transactions waiting for a human decision in the [dashboard](/concepts/dashboard). Each entry has a TTL. The default is 1 hour. If no decision is made before expiry, the intent moves to `expired`.
+
+**Approval trigger**
+
+A condition in a policy that requires human approval before the transaction can proceed. Triggers include: amount above a threshold, a specific action type, high risk score, unknown agent reputation, or a flagged reason.
+
+## B
+
+**Block reason**
+
+A machine-readable code explaining why a transaction was blocked. Examples: `per_tx_limit_exceeded`, `address_not_allowed`, `schedule_outside_window`. See [Block Reasons](/reference/block-reasons) for the full list.
+
+## C
+
+**Circuit breaker**
+
+An emergency stop mechanism. When active, all transactions for the agent are blocked regardless of policy. You can trigger it manually from the dashboard or it triggers automatically when envelope verification detects a mismatch.
+
+**Claim URL**
+
+A one-time URL returned by `POST /api/agents/register`. The wallet owner visits this URL to link the agent to their dashboard account. The URL expires after use.
+
+## D
+
+**Dashboard**
+
+The web interface at `app.mandate.md`. You use it to manage agents, configure policies, review approvals, and inspect audit logs.
+
+**Decline message**
+
+A human-readable explanation of why a transaction was blocked. Suitable for displaying to end users. Returned alongside the machine-readable [block reason](#block-reason) in the validation response.
+
+## E
+
+**Envelope verification**
+
+A post-broadcast check that compares the on-chain transaction against what was validated. If the broadcast transaction differs from the validated intent, the [circuit breaker](#circuit-breaker) trips automatically.
+
+**External signer**
+
+An interface for wrapping any existing wallet (viem, ethers, or custom) to work with [MandateWallet](#mandatewallet). You provide `getAddress`, `signTransaction`, and `sendTransaction` functions. The SDK handles the rest.
+
+## F
+
+**Fail-safe**
+
+Mandatory behavior: if the Mandate API is unreachable, the agent must NOT execute the transaction. This prevents agents from bypassing validation during outages. All SDK classes and plugins enforce this by default.
+
+## I
+
+**Insight**
+
+An AI-generated policy recommendation based on transaction patterns. Insights appear in the dashboard Insights tab and suggest limit adjustments, allowlist additions, or schedule changes.
+
+**Intent**
+
+A validated transaction request tracked through its lifecycle. Created when the agent calls `/validate`. Moves through states until it reaches a terminal state (`confirmed`, `failed`, `expired`, or `rejected`).
+
+**Intent hash**
+
+A keccak256 hash of canonical transaction parameters. Used in raw validation to ensure the server and client agree on the exact transaction contents. Format: `keccak256("<chainId>|<nonce>|<to>|<calldata>|<value>|<gasLimit>|<maxFeePerGas>|<maxPriorityFeePerGas>|<txType>|<accessList>")`.
+
+**Intent state**
+
+The current status of an intent. Possible values: `reserved`, `approval_pending`, `approved`, `broadcasted`, `confirmed`, `failed`, `expired`, `rejected`, `preflight`, `allowed`. See [How It Works](/how-it-works) for the state machine diagram.
+
+## M
+
+**MANDATE.md**
+
+A plain-language rules file that defines agent behavior constraints. The policy engine parses this file to configure limits, allowlists, schedules, and approval thresholds.
+
+**MandateClient**
+
+The low-level SDK class for direct API calls. Provides methods for `validate`, `register`, `status`, and `events`. Throws typed errors: `PolicyBlockedError`, `CircuitBreakerError`, `ApprovalRequiredError`. Import from `@mandate/sdk` or `@mandate/sdk/client`.
+
+**MandateWallet**
+
+The high-level SDK class that wraps [MandateClient](#mandateclient) with signing and broadcasting. It handles the full flow: validate against policy, sign locally, broadcast, post the transaction event, and poll for confirmation. This is the recommended entry point for most integrations.
+
+## N
+
+**Non-custodial**
+
+Mandate never holds or accesses private keys. All signing happens locally on the agent's machine. Mandate validates the intent, not the key.
+
+## P
+
+**Policy**
+
+A set of rules applied to an agent: spend limits, allowlists, schedule windows, approval thresholds, and blocked selectors. Policies are versioned. Each update creates a new version, preserving the full history.
+
+**Policy engine**
+
+The server-side component that evaluates transactions against the active policy. Runs 14 sequential checks in order: circuit breaker, schedule, allowlist, blocked actions, selectors, per-transaction limit, daily quota, monthly quota, risk score, reputation, reason scan, approval threshold, and final validation.
+
+**Preflight**
+
+Deprecated alias for `validate()`. Previously referred to the action-based validation endpoint for custodial wallets. Use `validate()` in all new integrations.
+
+## Q
+
+**Quota**
+
+Tracked spend amounts per agent per time window. Mandate tracks per-transaction, daily, and monthly quotas in USD. Both reserved (in-flight) and confirmed amounts count toward the quota.
+
+## R
+
+**Raw validation**
+
+Legacy EVM-specific validation that accepts full transaction parameters plus an [intent hash](#intent-hash). Deprecated in favor of `validate()`, which uses action-based parameters instead.
+
+**Reason field**
+
+A required string explaining why the agent wants to transact. Every call to `/validate` must include a reason. The policy engine passes this through the [reason scanner](#reason-scanner) to check for manipulation.
+
+**Reason scanner**
+
+A service that checks the reason field for prompt injection and manipulation patterns. Uses a two-layer approach: hardcoded pattern rules for known attacks, plus an LLM judge for novel patterns.
+
+**Runtime key**
+
+The authentication token for the Mandate API. Format: `mndt_live_*` for production, `mndt_test_*` for testnet. Returned at registration. Passed as a Bearer token in the `Authorization` header.
+
+## S
+
+**Schedule**
+
+A policy constraint that limits when transactions are allowed. You define permitted days of the week and hour ranges. Transactions outside the schedule window are blocked.
+
+**Selector**
+
+The first 4 bytes of EVM calldata, identifying the contract function being called. Policies can block specific selectors outright or require approval for them. Example: `0xa9059cbb` is the ERC-20 `transfer` selector.
+
+## V
+
+**Validate**
+
+The primary API call. Your agent sends an action, amount, recipient, and reason. Mandate evaluates the request against the active policy and returns one of three results: `allowed`, `blocked`, or `approval_required`.

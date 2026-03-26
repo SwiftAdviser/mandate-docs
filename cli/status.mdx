@@ -1,0 +1,91 @@
+---
+title: "Status"
+sidebarTitle: "status"
+description: "Check the current state of a Mandate intent, including transaction hash, block number, and USD amount."
+---
+
+## What does `status` do?
+
+The `status` command returns the current state of an intent. Use it to check whether a transaction has been confirmed on-chain, is waiting for approval, or has failed.
+
+## Usage
+
+```bash
+npx @mandate.md/cli status <intentId>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `intentId` | Yes | The intent ID returned by `validate`, `transfer`, or `event` |
+
+## Output fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `string` | Current intent state |
+| `intentId` | `string` | The intent identifier |
+| `txHash` | `string \| null` | Broadcast transaction hash |
+| `blockNumber` | `string \| null` | Block where the transaction landed |
+| `gasUsed` | `string \| null` | Gas consumed by the transaction |
+| `amountUsd` | `string \| null` | Transaction value in USD |
+| `decodedAction` | `string \| null` | Decoded function call (e.g. `transfer`) |
+| `summary` | `string \| null` | Human-readable summary of the transaction |
+| `next` | `string` | Suggested next command, if applicable |
+
+## Example outputs
+
+**Confirmed transaction:**
+
+```json
+{
+  "status": "confirmed",
+  "intentId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+  "txHash": "0x9f2e4a8b...abc1",
+  "blockNumber": "12345678",
+  "gasUsed": "52341",
+  "amountUsd": "50.00",
+  "decodedAction": "transfer",
+  "summary": "$50 USDC to 0xAlice"
+}
+```
+
+**Pending approval:**
+
+```json
+{
+  "status": "approval_pending",
+  "intentId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+  "txHash": null,
+  "blockNumber": null,
+  "amountUsd": "5000.00",
+  "next": "Run: mandate approve a1b2c3d4-5678-90ab-cdef-1234567890ab"
+}
+```
+
+**Failed transaction:**
+
+```json
+{
+  "status": "failed",
+  "intentId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+  "txHash": "0x7c3f...de92",
+  "blockReason": "envelope_mismatch"
+}
+```
+
+The `next` field appears when there is a logical follow-up action. For `reserved` intents, it suggests `event`. For `approval_pending`, it suggests `approve`. For `broadcasted`, it suggests polling `status` again.
+
+See [Intent States](/reference/intent-states) for the full state machine diagram and transition rules.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Wait for Approval" icon="arrow-right" href="/cli/approve">
+    Poll until the wallet owner makes a decision on a pending intent.
+  </Card>
+  <Card title="Intent States Reference" icon="arrow-right" href="/reference/intent-states">
+    Full state machine with transitions, expiry windows, and triggers.
+  </Card>
+</CardGroup>

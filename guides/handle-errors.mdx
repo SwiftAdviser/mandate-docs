@@ -1,0 +1,198 @@
+---
+title: "Handle Errors"
+sidebarTitle: "Handle Errors"
+description: "Catch and recover from all 5 Mandate error types: PolicyBlockedError, CircuitBreakerError, ApprovalRequiredError, RiskBlockedError, and MandateError."
+---
+
+import ErrorHandling from "/snippets/error-handling.mdx";
+import FailSafe from "/snippets/fail-safe.mdx";
+
+## Error class hierarchy
+
+The Mandate SDK throws 5 typed error classes. Every error extends `MandateError`, which extends the native `Error`. Use `instanceof` to handle each scenario precisely.
+
+```
+MandateError (base: any API error)
+├── PolicyBlockedError   (422: policy rule violated)
+├── CircuitBreakerError  (403: agent emergency-stopped)
+├── ApprovalRequiredError (202: human approval needed)
+└── RiskBlockedError     (422: risk scanner flagged)
+```
+
+All classes are exported from `@mandate/sdk`. Import them in a single statement:
+
+```typescript
+import {
+  MandateError,
+  PolicyBlockedError,
+  CircuitBreakerError,
+  ApprovalRequiredError,
+  RiskBlockedError,
+} from '@mandate/sdk';
+```
+
+## Catching errors with instanceof
+
+Order matters. Check specific subclasses before the base `MandateError`. Here is the complete pattern:
+
+<CodeGroup>
+```typescript TypeScript
+import {
+  MandateClient,
+  PolicyBlockedError,
+  CircuitBreakerError,
+  ApprovalRequiredError,
+  RiskBlockedError,
+  MandateError,
+} from '@mandate/sdk';
+
+const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY! });
+
+try {
+  await client.validate({
+    action: 'transfer',
+    amount: '500',
+    to: '0xRecipientAddress',
+    token: 'USDC',
+    reason: 'Payment for API access',
+  });
+} catch (err) {
+  if (err instanceof CircuitBreakerError) {
+    // Emergency stop. All transactions blocked until owner resets.
+    console.error('EMERGENCY: Circuit breaker active. Halting agent.');
+    // Notify ops team. Stop the agent loop. Do NOT retry.
+    process.exit(1);
+
+  } else if (err instanceof RiskBlockedError) {
+    // Destination address flagged by Aegis risk scanner.
+    console.error(`Risky address: ${err.blockReason}`);
+    // Do not retry with the same address. May need manual review.
+
+  } else if (err instanceof ApprovalRequiredError) {
+    // Transaction needs human sign-off. Poll until decided.
+    console.log(`Approval needed: ${err.approvalReason}`);
+    const status = await client.waitForApproval(err.intentId, {
+      timeoutMs: 3600_000,
+      onPoll: (s) => console.log(`Status: ${s.status}`),
+    });
+    if (status.status === 'approved') {
+      console.log('Approved. Proceeding.');
+    }
+
+  } else if (err instanceof PolicyBlockedError) {
+    // Policy rule violated. Show the decline message.
+    console.log(`Blocked: ${err.blockReason}`);
+    if (err.declineMessage) console.log(`Message: ${err.declineMessage}`);
+    if (err.detail) console.log(`Detail: ${err.detail}`);
+    // Do NOT retry with the same parameters.
+
+  } else if (err instanceof MandateError) {
+    // Generic API error. Check statusCode.
+    console.error(`API error ${err.statusCode}: ${err.message}`);
+    // 5xx: safe to retry with backoff. 4xx: fix the request.
+  }
+}
+```
+
+```bash CLI
+# CLI exits with non-zero codes on errors:
+# Exit 1 = policy blocked, Exit 2 = circuit breaker, Exit 3 = approval required
+npx @mandate/cli validate --action transfer --amount 500 --to 0xRecipientAddress --token USDC --reason "Payment"
+echo "Exit code: $?"
+```
+
+```bash curl
+curl -s -w "\n%{http_code}" -X POST https://app.mandate.md/api/validate \
+  -H "Authorization: Bearer mndt_test_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"transfer","amount":"500","to":"0xRecipientAddress","token":"USDC","reason":"Payment"}'
+# 422 = policy blocked, 403 = circuit breaker, 202 = approval required
+```
+</CodeGroup>
+
+### What to do for each error
+
+| Error | HTTP | Action |
+|-------|------|--------|
+| `CircuitBreakerError` | 403 | Stop all transactions. Notify the agent owner. Wait for [dashboard reset](/dashboard/circuit-breaker). |
+| `RiskBlockedError` | 422 | Verify the destination address. Do not retry with the same address. |
+| `ApprovalRequiredError` | 202 | Call `waitForApproval()`. See [Handle Approvals](/guides/handle-approvals). |
+| `PolicyBlockedError` | 422 | Display `declineMessage`. Log `blockReason`. Adjust params or update policy. |
+| `MandateError` | varies | Check `statusCode`. Retry 5xx with backoff. Fix 4xx requests. |
+
+## Block reason reference
+
+When a `PolicyBlockedError` fires, the `blockReason` field tells you exactly which check failed. Here are the most common values:
+
+| blockReason | Meaning | Action |
+|-------------|---------|--------|
+| `per_tx_limit_exceeded` | Single transaction amount too high | Reduce amount or request policy change |
+| `daily_quota_exceeded` | Daily spend limit exhausted | Wait until the next UTC day or request increase |
+| `monthly_quota_exceeded` | Monthly spend limit exhausted | Wait until the next month or request increase |
+| `address_not_allowed` | Destination not in allowlist | Add the address in [Policy Builder](/dashboard/policy-builder) |
+| `action_not_allowed` | Action type blocked by policy | Update allowed actions in policy |
+| `selector_not_allowed` | Function selector blocked | Update allowed selectors in policy |
+| `schedule_outside_window` | Transaction outside allowed hours | Wait for the schedule window to open |
+| `circuit_breaker_active` | Emergency stop is active | Owner must [reset the circuit breaker](/dashboard/circuit-breaker) |
+| `reason_blocked` | Prompt injection detected in reason field | Review and rewrite the reason text |
+| `aegis_critical_risk` | Address flagged as critical risk | Do not transact with this address |
+| `aegis_high_risk` | Address flagged as high risk | Verify the address before proceeding |
+
+See [Block Reasons Reference](/reference/block-reasons) for the full list of all reason codes.
+
+## Retry strategy
+
+Not all errors are retryable. Follow these rules to avoid wasting cycles or triggering rate limits.
+
+| Error type | Retryable? | Strategy |
+|------------|-----------|----------|
+| Network error / timeout | Yes | Exponential backoff: 1s, 2s, 4s. Max 3 attempts. |
+| `MandateError` (5xx) | Yes | Exponential backoff: 1s, 2s, 4s. Max 3 attempts. |
+| `MandateError` (4xx) | No | Fix the request. Client-side problem. |
+| `PolicyBlockedError` | No | Same parameters will fail again. Adjust amount, address, or policy. |
+| `ApprovalRequiredError` | N/A | Not a failure. Poll with `waitForApproval()`. |
+| `CircuitBreakerError` | No | Do not retry until the owner resets via dashboard. |
+| `RiskBlockedError` | No | Do not retry with the same destination address. |
+
+```typescript
+async function validateWithRetry(client: MandateClient, params: any, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await client.validate(params);
+    } catch (err) {
+      if (err instanceof MandateError && err.statusCode >= 500 && attempt < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        continue;
+      }
+      throw err; // PolicyBlockedError, CircuitBreakerError, etc. bubble up
+    }
+  }
+}
+```
+
+## Fail-safe rules
+
+<FailSafe />
+
+If the Mandate API is unreachable, your agent must **block the transaction**. Never fall back to unvalidated execution. A network failure is not permission to skip validation. Treat an unreachable API the same as a rejection.
+
+<Warning>
+This is the most critical rule in any Mandate integration. If you cannot reach the API, do not execute the transaction. Block, log the error, and retry later.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Error Classes Reference" icon="code" href="/sdk/errors">
+    Full property tables and code examples for all 5 error classes.
+  </Card>
+  <Card title="Block Reasons" icon="list" href="/reference/block-reasons">
+    Complete list of blockReason codes, meanings, and recommended actions.
+  </Card>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Step-by-step guide to calling validate() in your agent code.
+  </Card>
+  <Card title="Common Errors" icon="circle-exclamation" href="/troubleshooting/common-errors">
+    Troubleshoot frequent issues with error codes and solutions.
+  </Card>
+</CardGroup>

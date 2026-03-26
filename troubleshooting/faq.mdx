@@ -1,0 +1,189 @@
+---
+title: "Frequently Asked Questions"
+sidebarTitle: "FAQ"
+description: "Answers to the 20 most common questions about Mandate: chain support, testing, key management, approvals, and integration patterns."
+---
+
+## General
+
+### 1. Can I use Mandate with Solana?
+
+Yes. Action-based validation (`POST /validate`) works with any chain. You pass `action`, `reason`, `amount`, and `to` as strings. Address comparison is case-sensitive for non-EVM chains, so Solana base58 addresses work as-is. The allowlist checks compare addresses exactly as stored.
+
+Raw validation (`POST /validate/raw`) is EVM-only and requires EIP-1559 transaction parameters.
+
+### 2. What happens if the Mandate API is down?
+
+Block the transaction. Never fall back to calling the wallet directly. An unreachable policy server does not mean "no policies apply." It means policies cannot be verified. Retry up to 3 times at 30-second intervals. If all retries fail, inform the user: "Cannot execute until policy server recovers. No funds were spent."
+
+This is the core fail-safe principle. See [Fail-Safe Behavior](/guides/fail-safe).
+
+### 3. Can I use Mandate without a private key?
+
+Yes. Action-based validation does not require gas parameters, nonce, or signing. You validate the intent (action + reason + amount + recipient), then call your wallet provider (Bankr, Locus, Sponge, or any custodial API) to execute. Mandate validates the intent. Your wallet handles execution.
+
+### 4. How do I test without real funds?
+
+Use a `mndt_test_*` runtime key with Base Sepolia (chain ID 84532). Testnet validation runs the full 14-check pipeline identically to mainnet. Fund your test wallet from a Base Sepolia faucet. Testnet usage is free.
+
+```bash
+mandate login --name "TestAgent" --address 0xYourTestAddress
+mandate validate --action transfer --reason "Test payment" --amount 1 --to 0xRecipient
+```
+
+### 5. What is the difference between validate and raw validate?
+
+**`POST /validate` (recommended):** Action-based. Send `action`, `reason`, `amount`, `to`. Works with any wallet type. No intent hash, gas, or nonce needed. Returns `allowed: true` or a block reason.
+
+**`POST /validate/raw` (deprecated):** EVM-specific. Send full transaction parameters (nonce, gas, calldata) plus an `intentHash`. Used by self-custodial agents that sign locally. Supports envelope verification after broadcast.
+
+Use action-based validation for all new integrations.
+
+## Keys and Authentication
+
+### 6. Can multiple agents share a runtime key?
+
+No. Each agent gets its own runtime key at registration. Policies, quotas, and audit logs are tracked per agent. Sharing a key means shared quotas and a shared audit trail, which defeats the purpose of per-agent governance.
+
+### 7. How do I rotate my runtime key?
+
+Open the dashboard, navigate to the agent's detail page, and click "Regenerate Key." The old key is immediately invalidated. Update your `~/.mandate/credentials.json` and any environment variables with the new key.
+
+```bash
+# After regeneration, update your env
+export MANDATE_RUNTIME_KEY="mndt_test_newkey..."
+```
+
+### 8. Does Mandate support ERC-721 and ERC-1155?
+
+Yes, through raw validation. Raw validation accepts any calldata, so you can validate NFT transfers, approvals, and marketplace interactions. The policy engine applies spend limits based on the decoded USD value. For NFTs without clear USD pricing, set `amount` in the action-based endpoint or rely on allowlist and selector-based controls.
+
+## Chains and Tokens
+
+### 9. What chains are supported?
+
+Four chains: Ethereum Mainnet (1), Ethereum Sepolia (11155111), Base Mainnet (8453), and Base Sepolia (84532). Test keys (`mndt_test_*`) work with testnets. Live keys (`mndt_live_*`) work with mainnets.
+
+See [Chain Reference](/reference/chain-reference) for USDC addresses and SDK constants.
+
+### 10. Can I set different policies per chain?
+
+One policy per agent. To use different policies per chain, create separate agents for each chain. Each agent has its own runtime key, policy, quotas, and audit log.
+
+## Approvals
+
+### 11. How long do approvals last?
+
+The `approval_pending` state has a 1-hour TTL. If the owner does not respond within 1 hour, the intent expires and any reserved quota is released. After approval, the agent has a 10-minute broadcast window.
+
+### 12. Can I approve via API?
+
+Yes. Use `POST /api/approvals/{id}/decide` with a Sanctum authentication token:
+
+```bash
+curl -X POST https://app.mandate.md/api/approvals/apr_abc123/decide \
+  -H "Authorization: Bearer <sanctum-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"decision": "approve"}'
+```
+
+Dashboard, Telegram, and Slack approval buttons call this endpoint under the hood.
+
+## Policies and Limits
+
+### 13. Is the reason field stored?
+
+Yes. The reason field is stored in the audit log permanently. Every transaction record includes the agent's stated reason, the validation result, and the policy evaluation trace. When the optional LLM judge runs, it uses zero-retention (the reason is not persisted by the LLM provider).
+
+### 14. What is the default policy?
+
+After registration and claiming, agents get: $100 per-transaction limit, $1,000 daily limit, no monthly cap, no address restrictions, no approval rules, risk scanning enabled. Adjust these in the [Policy Builder](/dashboard/policy-builder).
+
+### 15. Can agents register themselves?
+
+Yes. `POST /api/agents/register` requires no authentication. The agent receives a `runtimeKey` and a `claimUrl`. The human owner visits the `claimUrl` to link the agent to their dashboard account. Until claimed, the agent uses the default policy.
+
+## Monitoring and Audit
+
+### 16. How do I monitor agent spend?
+
+The dashboard provides three views:
+
+1. **Audit Log**: Every validation request, approval decision, and on-chain confirmation.
+2. **Insights**: Quota usage visualization showing per-day and per-month spend against limits.
+3. **Agent Detail**: Current quota consumption and remaining budget at a glance.
+
+You can also query intent status programmatically using `GET /api/intents/{id}/status`.
+
+## Advanced
+
+### 17. Does Mandate support batch transactions?
+
+Validate each transaction individually. Mandate tracks intents one at a time, with independent quota reservations and state machines. For batch operations, loop through your transactions and validate each before execution.
+
+```typescript
+for (const tx of transactions) {
+  const result = await client.validate({
+    action: tx.action,
+    reason: tx.reason,
+    amount: tx.amount,
+    to: tx.to,
+  });
+  if (result.allowed) {
+    await executeTransaction(tx);
+  }
+}
+```
+
+### 18. What about gas sponsorship?
+
+Mandate validates the intent. Gas is the agent's responsibility. If you use a gas relay or paymaster, Mandate validates the intent before you submit to the relay. The gas payment mechanism is orthogonal to policy enforcement.
+
+### 19. Can I use Mandate with ethers.js?
+
+Yes. Wrap your ethers.js signer in the `ExternalSigner` interface:
+
+```typescript
+import { MandateWallet } from '@mandate.md/sdk';
+import { ethers } from 'ethers';
+
+const ethersWallet = new ethers.Wallet(privateKey, provider);
+
+const mandateWallet = new MandateWallet({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY,
+  chainId: 84532,
+  signer: {
+    sendTransaction: async (tx) => {
+      const response = await ethersWallet.sendTransaction({
+        to: tx.to,
+        data: tx.data,
+        value: tx.value,
+        gasLimit: tx.gas,
+        maxFeePerGas: tx.maxFeePerGas,
+        maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
+        nonce: tx.nonce,
+      });
+      return response.hash as `0x${string}`;
+    },
+    getAddress: () => ethersWallet.address as `0x${string}`,
+  },
+});
+```
+
+### 20. Is there a free tier?
+
+Yes. Testnet usage is completely free. Use `mndt_test_*` keys with Sepolia or Base Sepolia. The full 14-check pipeline, approval workflows, audit log, and dashboard are available on testnet at no cost. Mainnet pricing is based on validated intents per month.
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Register an agent and validate your first transaction in under 5 minutes.
+  </Card>
+  <Card title="Common Errors" icon="circle-exclamation" href="/troubleshooting/common-errors">
+    Step-by-step solutions for the most frequent errors.
+  </Card>
+  <Card title="Integration Guide" icon="plug" href="/guides/choosing-integration">
+    Pick the right Mandate integration for your framework.
+  </Card>
+</CardGroup>

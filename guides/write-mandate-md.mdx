@@ -1,0 +1,193 @@
+---
+title: "Writing MANDATE.md Policy Files"
+sidebarTitle: "MANDATE.md"
+description: "Define agent behavior constraints in plain language with MANDATE.md. Learn the syntax, structure, and how each section maps to policy engine fields."
+---
+
+## What is MANDATE.md?
+
+MANDATE.md is a plain-language rules file that defines what your agent can and cannot do with money. You write constraints in natural language. The policy engine parses them into the `guard_rules` field and enforces them on every transaction.
+
+Think of it as a constitution for your agent's wallet. Place it in your project root or edit it in the [dashboard editor](/dashboard/mandate-md-editor). The scanner recognizes `MANDATE.md` as a project-level protection signal, so any codebase with this file is considered Mandate-protected.
+
+## Syntax and structure
+
+MANDATE.md uses a simple Markdown format. Each H2 section maps to a specific policy domain. The engine reads the headings and bullet points, then translates them into enforceable rules.
+
+```markdown
+# Agent Policy: Trading Bot
+
+## Spending Limits
+- Maximum $500 per transaction
+- Maximum $5,000 per day
+- Maximum $20,000 per month
+
+## Allowed Addresses
+- 0x036CbD53842c5426634e7929541eC2318f3dCF7e (USDC contract)
+- 0xRecipientAddress (Treasury)
+
+## Blocked Actions
+- approve (no token approvals)
+- swap (no DEX trades)
+
+## Approval Required
+- Any transfer above $1,000
+- Any new address not in allowlist
+
+## Schedule
+- Weekdays only (Monday through Friday)
+- Business hours: 9:00 to 18:00 UTC
+```
+
+<Note>
+The `# Agent Policy: <name>` heading is optional but recommended. It helps identify which agent this policy belongs to when you have multiple MANDATE.md files across projects.
+</Note>
+
+### Section rules
+
+Each section follows a consistent pattern:
+
+- **Headings**: Use `## Section Name` with one of the recognized section names (Spending Limits, Allowed Addresses, Blocked Actions, Approval Required, Schedule).
+- **Items**: Bullet points with a dash (`-`). One constraint per line.
+- **Addresses**: Full 0x-prefixed Ethereum addresses. Parenthetical labels are ignored by the parser but useful for documentation.
+- **Amounts**: Dollar sign prefix with number (`$500`). The engine converts to USD for quota enforcement.
+- **Time ranges**: `HH:MM to HH:MM UTC` format. Days as full names (Monday, Tuesday, etc.).
+
+## Use case examples
+
+### DeFi trading agent
+
+A bot that executes arbitrage and yield farming. Needs higher limits and access to specific DEX contracts, but requires human approval for large swaps.
+
+```markdown
+# Agent Policy: DeFi Trader
+
+## Spending Limits
+- Maximum $2,000 per transaction
+- Maximum $15,000 per day
+- Maximum $50,000 per month
+
+## Allowed Addresses
+- 0x036CbD53842c5426634e7929541eC2318f3dCF7e (USDC)
+- 0x4200000000000000000000000000000000000006 (WETH)
+- 0x2626664c2603336E57B271c5C0b26F421741e481 (Uniswap Router)
+
+## Blocked Actions
+- approve (prevent unlimited allowances)
+
+## Approval Required
+- Any swap above $1,000
+- Any transfer to an address not in allowlist
+
+## Schedule
+- Every day (24/7 operation)
+```
+
+### Payroll agent
+
+A bot that sends recurring payments to a fixed set of employee wallets. Strict constraints: no new addresses, no approvals needed for routine payments under the limit.
+
+```markdown
+# Agent Policy: Payroll Bot
+
+## Spending Limits
+- Maximum $5,000 per transaction
+- Maximum $25,000 per day
+- Maximum $100,000 per month
+
+## Allowed Addresses
+- 0xEmployee1Address (Alice)
+- 0xEmployee2Address (Bob)
+- 0xEmployee3Address (Charlie)
+- 0x036CbD53842c5426634e7929541eC2318f3dCF7e (USDC contract)
+
+## Blocked Actions
+- approve
+- swap
+- delegate
+
+## Schedule
+- Weekdays only (Monday through Friday)
+- Business hours: 8:00 to 20:00 UTC
+```
+
+### Shopping agent
+
+A personal assistant that makes small purchases on your behalf. Low per-transaction limit, broad address access, and all actions except approve are blocked.
+
+```markdown
+# Agent Policy: Shopping Assistant
+
+## Spending Limits
+- Maximum $50 per transaction
+- Maximum $200 per day
+- Maximum $1,000 per month
+
+## Blocked Actions
+- approve (no token approvals)
+
+## Approval Required
+- Any transfer above $25
+
+## Schedule
+- Every day
+- Hours: 6:00 to 23:00 UTC
+```
+
+## How sections map to policy fields
+
+Each MANDATE.md section translates directly to fields in the policy engine. When you create or update a policy through the [dashboard builder](/dashboard/policy-builder), these fields are set automatically from your MANDATE.md content.
+
+| MANDATE.md Section | Policy Field | Type |
+|-------------------|-------------|------|
+| Spending Limits: "per transaction" | `spend_limit_per_tx_usd` | Number (USD) |
+| Spending Limits: "per day" | `spend_limit_per_day_usd` | Number (USD) |
+| Spending Limits: "per month" | `spend_limit_per_month_usd` | Number (USD) |
+| Allowed Addresses | `allowed_addresses` | Array of `0x` strings |
+| Blocked Actions | `blocked_actions` | Array of action names |
+| Approval Required: amount threshold | `require_approval_above_usd` | Number (USD) |
+| Approval Required: actions | `require_approval_actions` | Array of action names |
+| Schedule: days | `schedule.days` | Array of day names |
+| Schedule: hours | `schedule.hours` | Object with `start` and `end` (UTC) |
+
+<Tip>
+When both MANDATE.md and dashboard policy settings exist for the same agent, the stricter constraint wins. The engine takes the lower limit, the narrower schedule, and the combined blocklist.
+</Tip>
+
+## What happens when a rule is violated?
+
+When an agent attempts a transaction that breaks a MANDATE.md rule, the policy engine returns a specific [block reason](/reference/block-reasons). For example:
+
+- Exceeding per-transaction limit returns `spend_limit_exceeded`
+- Sending to an address not in the allowlist returns `address_not_allowed`
+- Calling a blocked action returns `action_blocked`
+- Transacting outside schedule returns `schedule_outside_window`
+
+The agent receives the block reason in the API response and can communicate it to the user or log it for debugging.
+
+## Self-improving rules with Insights
+
+Mandate's [Insights feature](/dashboard/insights) watches your agent's transaction patterns and suggests policy improvements. After a few days of operation, you may see suggestions like:
+
+- "This agent only transacts with 3 addresses. Add an allowlist to restrict to these addresses."
+- "Average transaction is $45. Consider lowering per-tx limit from $500 to $100."
+- "No transactions on weekends. Add a weekday-only schedule."
+
+Review suggestions in the dashboard. Accept to update the policy, or dismiss to keep the current rules. Insights never changes your policy automatically.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Policy Builder" icon="sliders" href="/dashboard/policy-builder">
+    Configure policies visually in the dashboard with real-time preview.
+  </Card>
+  <Card title="Insights" icon="lightbulb" href="/dashboard/insights">
+    AI-powered suggestions to tighten your agent's policy over time.
+  </Card>
+  <Card title="Policy Fields Reference" icon="table" href="/reference/policy-fields">
+    Complete reference for all policy engine fields and their valid values.
+  </Card>
+  <Card title="Policy Engine" icon="shield-check" href="/concepts/policy-engine">
+    How the engine evaluates transactions through 14 sequential checks.
+  </Card>
+</CardGroup>

@@ -1,0 +1,73 @@
+---
+title: "mandate login"
+sidebarTitle: "login"
+description: "Register a new agent with the Mandate API and store credentials locally for subsequent commands."
+---
+
+## What does login do?
+
+The `login` command registers a new agent with the Mandate API. It creates an agent identity, generates a runtime key, and saves both to `~/.mandate/credentials.json`. You run this once per agent.
+
+```bash
+npx @mandate.md/cli login --name "my-agent"
+```
+
+## Options
+
+| Flag | Required | Description |
+|------|:---:|-------------|
+| `--name` | Yes | Agent name (shown in the dashboard) |
+| `--address` | No | EVM wallet address (0x...). Set now or later via `activate` |
+| `--perTxLimit` (`-p`) | No | Per-transaction USD limit |
+| `--dailyLimit` (`-d`) | No | Daily USD limit |
+| `--chainId` | No | Chain ID (default: `84532`, Base Sepolia) |
+| `--baseUrl` | No | Custom Mandate API URL |
+
+## Example: register with limits
+
+```bash
+npx @mandate.md/cli login \
+  --name "payment-bot" \
+  --address 0x1234567890abcdef1234567890abcdef12345678 \
+  --perTxLimit 100 \
+  --dailyLimit 500
+```
+
+## Output
+
+```json
+{
+  "agentId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "runtimeKey": "mndt_test_abc12...xyz",
+  "claimUrl": "https://app.mandate.md/claim/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "evmAddress": "0x1234567890abcdef1234567890abcdef12345678"
+}
+```
+
+The runtime key is masked in the output. The full key is stored in `~/.mandate/credentials.json`.
+
+## What is the claim URL?
+
+The `claimUrl` links this agent to a human's dashboard account. Share it with the wallet owner. When they visit the URL and sign in, the agent appears in their [dashboard](/dashboard/overview) where they can configure policies, approve transactions, and view the audit log.
+
+<Note>
+If you omit `--address`, the agent registers with a zero address. You must call `mandate activate 0xYourAddress` before validating any transactions.
+</Note>
+
+## What happens to credentials?
+
+The command writes `~/.mandate/credentials.json` with `0600` permissions. All subsequent authenticated commands (`validate`, `transfer`, `whoami`, etc.) read this file automatically. To switch agents, delete the file and run `login` again.
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Activate Wallet" icon="arrow-right" href="/cli/activate">
+    Set or change the wallet address after registration.
+  </Card>
+  <Card title="Validate a Transaction" icon="arrow-right" href="/cli/validate">
+    Run your first policy check from the CLI.
+  </Card>
+  <Card title="Register Agent Guide" icon="arrow-right" href="/guides/register-agent">
+    End-to-end walkthrough of the registration flow.
+  </Card>
+</CardGroup>

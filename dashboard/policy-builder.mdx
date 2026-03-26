@@ -1,0 +1,117 @@
+---
+title: "Policy Builder"
+sidebarTitle: "Policy Builder"
+description: "Configure per-agent policies with spend limits, allowlists, blocked actions, approval thresholds, schedules, and guard rules in the Mandate dashboard."
+---
+
+## What is the policy builder?
+
+The policy builder is the most important page in the Mandate dashboard. It provides a visual editor for configuring the rules that govern each agent's transactions. Every field you set here maps to a check in the [policy engine](/concepts/policy-engine). Select an agent from the dropdown to load its current policy, edit the fields, and save.
+
+## Spend limits
+
+Control how much an agent can spend in USD terms:
+
+| Field | Description |
+|-------|-------------|
+| **Per-transaction limit** | Maximum USD value for a single transaction. |
+| **Daily limit** | Maximum cumulative USD value within a 24-hour rolling window. |
+| **Monthly limit** | Maximum cumulative USD value within a 30-day rolling window. |
+
+Set any combination of these limits. If a transaction would exceed any threshold, the policy engine blocks it with a specific `blockReason`.
+
+<Tip>
+Start with conservative limits (e.g., $10 per-tx, $50 daily) and increase them as you gain confidence in the agent's behavior.
+</Tip>
+
+## Allowed addresses
+
+Add destination addresses the agent is permitted to send funds to. Enter addresses as a tag input: paste or type each address and press Enter. If this list is non-empty, the agent can only transact with these addresses. All other destinations are blocked.
+
+## Allowed contracts
+
+Separate from allowed addresses, this field restricts which smart contracts the agent can interact with. Useful when you want to allow contract calls (e.g., USDC transfer via the token contract) but block arbitrary contract interactions.
+
+### Popular token shortcuts
+
+The policy builder provides quick-add buttons for common tokens:
+
+- **USDC**: adds the canonical USDC contract for the agent's chain
+- **USDT**: adds the canonical USDT contract for the agent's chain
+
+Click a shortcut to add the contract address automatically.
+
+## Blocked selectors
+
+Enter 4-byte function selectors (hex) that the agent must never call. For example, block `0x095ea7b3` to prevent ERC-20 `approve()` calls. The policy engine matches the first 4 bytes of transaction calldata against this list.
+
+## Blocked actions
+
+Select high-level actions to block entirely:
+
+- **transfer**: ERC-20 token transfers
+- **approve**: ERC-20 allowance approvals
+- **swap**: DEX swap operations
+
+Blocking an action prevents the agent from executing it regardless of other policy fields.
+
+## Approval requirements
+
+Route specific transactions to the [approval queue](/dashboard/approvals) instead of blocking them:
+
+| Field | Description |
+|-------|-------------|
+| **Require approval selectors** | 4-byte selectors that trigger manual approval. |
+| **Require approval actions** | Actions (transfer, approve, swap) that require approval. |
+| **Require approval above threshold** | USD amount above which any transaction requires approval. |
+
+Transactions matching these rules enter `approval_pending` state. You receive a notification and must approve or reject from the dashboard.
+
+## Gas and value caps
+
+| Field | Description |
+|-------|-------------|
+| **Max gas limit** | Maximum gas limit in hex. Prevents runaway gas usage. |
+| **Max value** | Maximum native token value in wei. Caps ETH/native sends. |
+
+## Schedule
+
+Restrict when the agent can transact. Configure allowed days (Monday through Sunday) and hours (0-23) using the multiselect controls. Transactions outside the schedule window are blocked.
+
+This is useful for agents that should only operate during business hours or specific maintenance windows.
+
+## Guard rules (MANDATE.md)
+
+Write natural-language rules in the guard rules text field. These rules are parsed and applied alongside the structured policy fields. The field accepts up to 10,000 characters.
+
+Example guard rules:
+
+```
+Never approve transactions to addresses not on the allowlist.
+Block all swap operations on weekends.
+Require approval for any transfer above $100.
+```
+
+See the [MANDATE.md editor](/dashboard/mandate-md-editor) for a dedicated editing experience with preview.
+
+## Policy versioning
+
+Every time you click **Save**, Mandate creates a new policy version and deactivates the previous one. You can view the version history in the policy builder. The active version is always the most recently saved.
+
+<Warning>
+Saving a new policy version takes effect immediately. Any in-flight transactions validated under the previous policy version continue with their original validation result.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Policy Fields Reference" icon="list" href="/reference/policy-fields">
+    Complete reference for every policy field and its validation behavior.
+  </Card>
+  <Card title="Write MANDATE.md" icon="file-lines" href="/guides/write-mandate-md">
+    Guide to writing effective natural-language guard rules.
+  </Card>
+  <Card title="Policy Engine" icon="gears" href="/concepts/policy-engine">
+    How the 14 sequential checks evaluate each transaction.
+  </Card>
+</CardGroup>

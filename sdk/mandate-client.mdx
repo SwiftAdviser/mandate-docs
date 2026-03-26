@@ -1,0 +1,483 @@
+---
+title: "MandateClient"
+sidebarTitle: "MandateClient"
+description: "Complete reference for MandateClient, the low-level SDK class for validating transactions, polling intent status, and managing approval workflows."
+---
+
+import InstallSdk from "/snippets/install-sdk.mdx";
+import ErrorHandling from "/snippets/error-handling.mdx";
+
+## What is MandateClient?
+
+`MandateClient` is the low-level API wrapper in the Mandate SDK. It maps 1:1 to the Mandate REST API: validate transactions, post events, poll intent status, and wait for approval decisions. Every method returns typed results and throws typed errors.
+
+Use `MandateClient` when your agent delegates signing to a separate wallet service (Bankr, Locus, Sponge) or when you need fine-grained control over the transaction lifecycle. If your agent holds its own private key, use [MandateWallet](/sdk/mandate-wallet) instead: it wraps `MandateClient` and handles signing, broadcasting, and confirmation automatically.
+
+## Installation
+
+<InstallSdk />
+
+## Constructor
+
+```typescript
+import { MandateClient } from '@mandate/sdk';
+
+const client = new MandateClient({
+  runtimeKey: 'mndt_test_abc123...',  // Required
+  baseUrl: 'https://app.mandate.md',  // Optional, defaults to this
+});
+```
+
+The `MandateConfig` interface accepts two fields:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `runtimeKey` | `string` | Yes | Your `mndt_live_...` or `mndt_test_...` runtime key |
+| `baseUrl` | `string` | No | Mandate API base URL. Defaults to `https://app.mandate.md` |
+
+<Warning>
+Store the runtime key in an environment variable. Never hardcode it in source files or commit it to version control.
+</Warning>
+
+## Static Methods
+
+### `MandateClient.register(params)`
+
+Registers a new agent with Mandate. This is the only method that does not require authentication, because the agent does not have a runtime key yet.
+
+```typescript
+static async register(params: {
+  name: string;
+  evmAddress: `0x${string}`;
+  chainId: number;
+  defaultPolicy?: {
+    spendLimitPerTxUsd?: number;
+    spendLimitPerDayUsd?: number;
+  };
+  baseUrl?: string;
+}): Promise<RegisterResult>
+```
+
+**Parameters:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `string` | Yes | Human-readable agent name |
+| `evmAddress` | `` `0x${string}` `` | Yes | The agent's wallet address |
+| `chainId` | `number` | Yes | Target chain (e.g. `84532` for Base Sepolia) |
+| `defaultPolicy` | `object` | No | Initial spend limits in USD |
+| `baseUrl` | `string` | No | Override the API base URL |
+
+**Returns** a `RegisterResult`:
+
+```typescript
+interface RegisterResult {
+  agentId: string;
+  runtimeKey: string;
+  claimUrl: string;
+  evmAddress: string;
+  chainId: number;
+}
+```
+
+**Example:**
+
+```typescript
+import { MandateClient } from '@mandate/sdk';
+
+const result = await MandateClient.register({
+  name: 'trading-agent',
+  evmAddress: '0xYourAgentWalletAddress',
+  chainId: 84532,
+  defaultPolicy: {
+    spendLimitPerTxUsd: 50,
+    spendLimitPerDayUsd: 500,
+  },
+});
+
+// Save the runtime key securely
+console.log('Runtime key:', result.runtimeKey);
+
+// Share this URL with the wallet owner
+console.log('Claim URL:', result.claimUrl);
+```
+
+<Note>
+The `claimUrl` must be shared with the wallet owner. They visit it to link the agent to their dashboard account. Until claimed, the agent operates under default policies.
+</Note>
+
+## Instance Methods
+
+### `client.validate(params)`
+
+The primary method for transaction validation. Sends the intended action to Mandate's policy engine, which runs 14 sequential checks: circuit breaker, schedule, allowlist, blocked actions, per-transaction limits, daily and monthly quotas, risk screening, reputation scoring, reason scanning, and approval thresholds.
+
+```typescript
+async validate(params: PreflightPayload): Promise<PreflightResult>
+```
+
+**`PreflightPayload`:**
+
+```typescript
+interface PreflightPayload {
+  action: string;     // e.g. "transfer", "swap", "approve"
+  amount?: string;    // USD amount as a string
+  to?: string;        // Recipient address
+  token?: string;     // Token symbol, e.g. "USDC"
+  reason: string;     // Human-readable explanation of intent
+  chain?: string;     // Chain identifier, e.g. "base-sepolia"
+}
+```
+
+**`PreflightResult`:**
+
+```typescript
+interface PreflightResult {
+  allowed: boolean;
+  intentId: string | null;
+  requiresApproval: boolean;
+  approvalId: string | null;
+  approvalReason?: string | null;
+  blockReason: string | null;
+  blockDetail?: string | null;
+  action: string;
+}
+```
+
+**Throws:**
+
+| Error Class | HTTP Status | Condition |
+|-------------|-------------|-----------|
+| `PolicyBlockedError` | 422 | Transaction violates a policy rule |
+| `CircuitBreakerError` | 403 | Agent is emergency-stopped |
+| `ApprovalRequiredError` | 202 | Amount exceeds approval threshold |
+| `RiskBlockedError` | 422 | Address flagged by risk scanner |
+
+**Full example with error handling:**
+
+```typescript
+import {
+  MandateClient,
+  PolicyBlockedError,
+  CircuitBreakerError,
+  ApprovalRequiredError,
+  RiskBlockedError,
+} from '@mandate/sdk';
+
+const client = new MandateClient({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+});
+
+try {
+  const result = await client.validate({
+    action: 'transfer',
+    amount: '50',
+    to: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    token: 'USDC',
+    reason: 'Payment for March API usage - invoice #4821',
+  });
+
+  console.log('Allowed:', result.allowed);
+  console.log('Intent ID:', result.intentId);
+  // Proceed with signing and broadcasting
+} catch (err) {
+  if (err instanceof PolicyBlockedError) {
+    console.log('Blocked:', err.blockReason);
+    console.log('Detail:', err.detail);
+    console.log('Decline message:', err.declineMessage);
+    // Do not retry. The policy must be updated in the dashboard.
+  } else if (err instanceof CircuitBreakerError) {
+    console.log('Circuit breaker active. All transactions blocked.');
+    // Stop all activity. Owner must reset via dashboard.
+  } else if (err instanceof ApprovalRequiredError) {
+    console.log('Needs approval. Intent:', err.intentId);
+    // Wait for the wallet owner to approve in the dashboard
+    const status = await client.waitForApproval(err.intentId);
+    console.log('Decision:', status.status);
+  } else if (err instanceof RiskBlockedError) {
+    console.log('Risk flagged:', err.blockReason);
+    // Address is on a risk list. Do not retry with the same recipient.
+  }
+}
+```
+
+<Note>
+The `reason` field is required. Mandate scans it for prompt injection patterns and displays it to the wallet owner on approval requests. Write a clear, honest description of what the agent is doing and why.
+</Note>
+
+### `client.preflight(params)`
+
+Backward-compatible alias for `validate()`. Same signature, same behavior, same return type.
+
+```typescript
+async preflight(params: PreflightPayload): Promise<PreflightResult>
+```
+
+Use `validate()` in new code. The `preflight()` method exists so older integrations continue to work without changes.
+
+### `client.rawValidate(payload)`
+
+<Info>
+**Deprecated.** Use `validate()` for action-based validation. Raw validation is kept for legacy self-custodial flows but will be removed in a future version. `MandateWallet` uses this method internally: you do not need to call it directly.
+</Info>
+
+Validates full EVM transaction parameters against the policy engine. Requires a precomputed `intentHash` that must match the server's recomputation exactly.
+
+```typescript
+async rawValidate(payload: IntentPayload): Promise<ValidateResult>
+```
+
+**`IntentPayload`:**
+
+```typescript
+interface IntentPayload {
+  chainId: number;
+  nonce: number;
+  to: `0x${string}`;
+  calldata: `0x${string}`;
+  valueWei: string;
+  gasLimit: string;
+  maxFeePerGas: string;
+  maxPriorityFeePerGas: string;
+  txType?: number;
+  accessList?: unknown[];
+  intentHash: `0x${string}`;
+  reason: string;
+}
+```
+
+**`ValidateResult`:**
+
+```typescript
+interface ValidateResult {
+  allowed: boolean;
+  intentId: string | null;
+  requiresApproval: boolean;
+  approvalId: string | null;
+  approvalReason?: string | null;
+  blockReason: string | null;
+  blockDetail?: string | null;
+}
+```
+
+Throws the same error classes as `validate()`: `PolicyBlockedError`, `CircuitBreakerError`, `ApprovalRequiredError`, `RiskBlockedError`.
+
+### `client.postEvent(intentId, txHash)`
+
+Posts the broadcast transaction hash back to Mandate for envelope verification. Required after `rawValidate()` flows. The server compares the on-chain transaction against the validated parameters. If they do not match, the circuit breaker trips.
+
+```typescript
+async postEvent(intentId: string, txHash: `0x${string}`): Promise<void>
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `intentId` | `string` | The intent ID returned by `rawValidate()` |
+| `txHash` | `` `0x${string}` `` | The broadcast transaction hash |
+
+**Example:**
+
+```typescript
+const result = await client.rawValidate(intentPayload);
+
+// Sign and broadcast the transaction locally...
+const txHash = '0xabc123...';
+
+// Report the hash for envelope verification
+await client.postEvent(result.intentId!, txHash as `0x${string}`);
+```
+
+<Warning>
+Skipping `postEvent()` leaves the intent in `broadcasted` state indefinitely. The envelope verifier cannot confirm the transaction, and the intent will expire.
+</Warning>
+
+### `client.getStatus(intentId)`
+
+Returns the current state of an intent. Use this for one-off status checks. For continuous polling, use `waitForApproval()` or `waitForConfirmation()` instead.
+
+```typescript
+async getStatus(intentId: string): Promise<IntentStatus>
+```
+
+**`IntentStatus`:**
+
+```typescript
+interface IntentStatus {
+  intentId: string;
+  status: 'reserved' | 'approval_pending' | 'approved' | 'broadcasted'
+        | 'confirmed' | 'failed' | 'expired';
+  txHash: string | null;
+  blockNumber: string | null;
+  gasUsed: string | null;
+  amountUsd: string | null;
+  decodedAction: string | null;
+  summary: string | null;
+  blockReason: string | null;
+  requiresApproval: boolean;
+  approvalId: string | null;
+  expiresAt: string | null;
+}
+```
+
+See [Intent States](/reference/intent-states) for a full diagram of state transitions and what triggers each one.
+
+**Example:**
+
+```typescript
+const status = await client.getStatus('intent_abc123');
+console.log('Current state:', status.status);
+console.log('TX hash:', status.txHash);
+```
+
+### `client.waitForApproval(intentId, opts?)`
+
+Polls the intent status until the wallet owner approves, rejects, or the approval expires. Use this after catching an `ApprovalRequiredError`.
+
+```typescript
+async waitForApproval(
+  intentId: string,
+  opts?: {
+    timeoutMs?: number;   // Default: 3,600,000 (1 hour)
+    intervalMs?: number;  // Default: 5,000 (5 seconds)
+    onPoll?: (status: IntentStatus) => void;
+  },
+): Promise<IntentStatus>
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `intentId` | `string` | - | The intent ID from `ApprovalRequiredError` |
+| `timeoutMs` | `number` | `3,600,000` | Maximum wait time (1 hour matches server approval TTL) |
+| `intervalMs` | `number` | `5,000` | Polling interval |
+| `onPoll` | `(status: IntentStatus) => void` | - | Callback invoked on each poll |
+
+**Returns** an `IntentStatus` with `status: 'approved'` or `status: 'confirmed'`.
+
+**Throws** `MandateError` if the approval is rejected (`failed`), expires (`expired`), or the polling timeout is exceeded.
+
+**Example:**
+
+```typescript
+import {
+  MandateClient,
+  ApprovalRequiredError,
+  MandateError,
+} from '@mandate/sdk';
+
+const client = new MandateClient({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+});
+
+try {
+  await client.validate({
+    action: 'transfer',
+    amount: '5000',
+    to: '0xRecipientAddress',
+    token: 'USDC',
+    reason: 'Large vendor payment - quarterly contract',
+  });
+} catch (err) {
+  if (err instanceof ApprovalRequiredError) {
+    console.log('Waiting for human approval...');
+
+    try {
+      const status = await client.waitForApproval(err.intentId, {
+        timeoutMs: 600_000, // 10 minutes
+        onPoll: (s) => console.log(`Polling... status: ${s.status}`),
+      });
+
+      console.log('Approved. Proceeding with transaction.');
+    } catch (pollErr) {
+      if (pollErr instanceof MandateError) {
+        console.log('Approval denied or expired:', pollErr.blockReason);
+      }
+    }
+  }
+}
+```
+
+### `client.waitForConfirmation(intentId, opts?)`
+
+Polls the intent status until the transaction is confirmed on-chain. Use this after broadcasting a transaction to verify it landed.
+
+```typescript
+async waitForConfirmation(
+  intentId: string,
+  opts?: {
+    timeoutMs?: number;   // Default: 300,000 (5 minutes)
+    intervalMs?: number;  // Default: 3,000 (3 seconds)
+  },
+): Promise<IntentStatus>
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `intentId` | `string` | - | The intent ID to monitor |
+| `timeoutMs` | `number` | `300,000` | Maximum wait time (5 minutes) |
+| `intervalMs` | `number` | `3,000` | Polling interval |
+
+**Returns** an `IntentStatus` with `status: 'confirmed'`, including the `txHash`, `blockNumber`, and `gasUsed`.
+
+**Throws** `MandateError` if the transaction fails, expires, or the polling timeout is exceeded.
+
+**Example:**
+
+```typescript
+// After broadcasting a transaction via rawValidate flow
+await client.postEvent(intentId, txHash);
+
+const confirmed = await client.waitForConfirmation(intentId, {
+  timeoutMs: 120_000, // 2 minutes
+});
+
+console.log('Confirmed in block:', confirmed.blockNumber);
+console.log('Gas used:', confirmed.gasUsed);
+console.log('Amount (USD):', confirmed.amountUsd);
+```
+
+## How does MandateClient compare to MandateWallet?
+
+| Capability | MandateClient | MandateWallet |
+|------------|--------------|---------------|
+| Validate transactions | Yes | Yes (internally) |
+| Sign transactions | No | Yes (local private key) |
+| Broadcast to chain | No | Yes |
+| Post events | Yes (manual) | Yes (automatic) |
+| Wait for confirmation | Yes (manual) | Yes (automatic) |
+| Requires private key | No | Yes |
+| Use case | Custodial wallets, custom signing | Self-custodial agents |
+
+Use `MandateClient` when another service handles signing. Use `MandateWallet` when your agent holds its own key.
+
+## Sub-path Import
+
+If you only need the client without the wallet (to avoid the `viem` dependency), use the sub-path export:
+
+```typescript
+import { MandateClient } from '@mandate/sdk/client';
+```
+
+This import pulls in `MandateClient` and the error classes only. No `viem`, no signing utilities.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MandateWallet" icon="wallet" href="/sdk/mandate-wallet">
+    High-level class that wraps MandateClient with local signing and broadcasting.
+  </Card>
+  <Card title="Error Classes" icon="triangle-exclamation" href="/sdk/errors">
+    Full reference for PolicyBlockedError, CircuitBreakerError, and recovery patterns.
+  </Card>
+  <Card title="SDK Types" icon="code" href="/sdk/types">
+    Complete TypeScript interfaces for all request and response objects.
+  </Card>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Step-by-step guide for integrating validation into your agent loop.
+  </Card>
+</CardGroup>

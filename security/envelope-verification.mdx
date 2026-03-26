@@ -1,0 +1,70 @@
+---
+title: "Envelope Verification"
+sidebarTitle: "Envelope Verification"
+description: "How Mandate verifies that on-chain transactions match validated parameters to prevent tx swapping."
+---
+
+**Envelope verification** is the process of comparing an on-chain transaction against the parameters that Mandate originally validated. It prevents "envelope swapping," where transaction parameters are modified between validation and broadcast.
+
+## Why does envelope verification exist?
+
+The raw validation flow has a critical trust gap. Mandate validates transaction parameters, then the agent signs and broadcasts independently. Between those two steps, a compromised agent, a malicious middleware, or a bug could alter the transaction. The destination address, value, or calldata could change.
+
+Envelope verification closes this gap. After the agent broadcasts, Mandate fetches the on-chain transaction and confirms it matches what was approved. If it does not match, the circuit breaker trips immediately.
+
+## How does the verification flow work?
+
+The process follows five steps:
+
+1. **Agent calls `rawValidate()`.** Mandate receives the full transaction parameters (to, value, calldata, gas params) and the `intentHash`. The server stores these parameters and creates an intent in `reserved` state.
+
+2. **Agent signs and broadcasts.** The agent uses its private key to sign the transaction and submits it to the network. Mandate is not involved in this step.
+
+3. **Agent calls `postEvent(intentId, txHash)`.** The agent reports the transaction hash back to Mandate. This links the on-chain transaction to the validated intent.
+
+4. **Mandate fetches the on-chain receipt.** An async job dispatches to retrieve the transaction details from the blockchain. The job retries with backoff if the transaction is not yet confirmed.
+
+5. **Mandate compares parameters.** The verifier checks four fields:
+
+| Field | Check |
+|-------|-------|
+| `to` | Destination address must match exactly |
+| `value` | Wei value must match exactly |
+| `calldata` | Transaction data must match exactly |
+| `gasLimit` | Must not exceed validated limit by more than 10% |
+
+## What happens on a mismatch?
+
+When the verifier detects a mismatch between validated and on-chain parameters, two things happen simultaneously:
+
+1. **The intent moves to `failed` state** with a `envelope_mismatch` failure reason. The specific mismatched fields are recorded in the intent metadata.
+
+2. **The circuit breaker trips.** All future transactions for this agent are blocked. The owner receives a notification (if configured) and must investigate before resetting.
+
+This is deliberately aggressive. An envelope mismatch means something in the signing pipeline is untrustworthy. Blocking everything until a human investigates is the safe default.
+
+## What causes a mismatch in practice?
+
+Most mismatches fall into three categories:
+
+- **Bug in the agent's signing code.** The agent modifies parameters after validation, often unintentionally. Common with custom signing pipelines that re-estimate gas or adjust nonces.
+- **Middleware tampering.** A proxy or middleware between the agent and the RPC node alters the transaction. This is the attack scenario envelope verification is designed to catch.
+- **Nonce collision.** The agent broadcasts a different transaction with the same nonce, replacing the validated one. The on-chain transaction has the correct nonce but wrong parameters.
+
+## Does envelope verification apply to all flows?
+
+No. Envelope verification only applies to the **raw validation** flow (`rawValidate()` + `postEvent()`). This flow is used by self-custodial agents that sign transactions locally.
+
+The **action-based validation** flow (`validate()` with `action` + `reason`) does not include broadcast tracking. In this flow, the agent or its wallet provider handles execution independently, and Mandate does not verify on-chain results.
+
+<CardGroup cols={3}>
+  <Card title="Circuit Breaker" icon="circle-stop" href="/security/circuit-breaker">
+    What happens when verification fails
+  </Card>
+  <Card title="Intent Hash" icon="hashtag" href="/concepts/intent-hash">
+    How Mandate computes transaction fingerprints
+  </Card>
+  <Card title="MandateClient" icon="code" href="/sdk/mandate-client">
+    Using rawValidate() and postEvent()
+  </Card>
+</CardGroup>

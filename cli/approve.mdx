@@ -1,0 +1,94 @@
+---
+title: "Approve"
+sidebarTitle: "approve"
+description: "Wait for a wallet owner to approve or reject a pending Mandate intent from the command line."
+---
+
+## What does `approve` do?
+
+The `approve` command polls the Mandate API until the wallet owner makes an approval decision. It blocks until the intent is approved, rejected, or the timeout expires. Use it after catching an approval-required response from `validate` or `transfer`.
+
+## Usage
+
+```bash
+npx @mandate.md/cli approve <intentId>
+npx @mandate.md/cli approve <intentId> --timeout 600
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `intentId` | Yes | The intent ID awaiting approval |
+
+## Options
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `--timeout` | No | `3600` | Maximum wait time in seconds (1 hour) |
+
+## Output
+
+**Approved:**
+
+```json
+{
+  "status": "approved",
+  "intentId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+  "feedback": "Approved, ready to broadcast",
+  "next": "Run: mandate event a1b2c3d4-5678-90ab-cdef-1234567890ab --tx-hash 0x..."
+}
+```
+
+**Rejected or expired:**
+
+```json
+{
+  "status": "expired",
+  "intentId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+  "feedback": "Intent ended with status: expired"
+}
+```
+
+## When to use this
+
+The `validate` and `transfer` commands return a `requiresApproval: true` response when the transaction exceeds the approval threshold set in the dashboard. The response includes the `intentId` and a `next` field pointing to `approve`:
+
+```json
+{
+  "ok": true,
+  "requiresApproval": true,
+  "intentId": "a1b2c3d4-...",
+  "feedback": "Mandate: approval required, waiting for owner decision",
+  "next": "Run: mandate approve a1b2c3d4-..."
+}
+```
+
+At this point, the wallet owner receives a notification (dashboard, Slack, or Telegram) with the transaction details and the agent's `reason` field. They approve or reject from the dashboard.
+
+Your agent runs `mandate approve <intentId>` to wait for the decision. Once approved, proceed with signing and broadcasting. If rejected or expired, stop.
+
+## Typical flow
+
+1. `mandate validate --action transfer --amount 5000 ...` returns approval required
+2. `mandate approve <intentId> --timeout 600` waits up to 10 minutes
+3. If approved: `mandate event <intentId> --tx-hash 0x...` (raw flow only)
+4. `mandate status <intentId>` to confirm
+
+<Tip>
+Set `--timeout` to match your agent's tolerance for blocking. For automated pipelines, shorter timeouts (60-300 seconds) prevent indefinite hangs. The default of 3600 seconds matches the server-side approval TTL.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Check Intent Status" icon="arrow-right" href="/cli/status">
+    Verify the final state after approval.
+  </Card>
+  <Card title="Handle Approvals Guide" icon="arrow-right" href="/guides/handle-approvals">
+    End-to-end guide for integrating approval workflows into your agent.
+  </Card>
+  <Card title="Dashboard Approvals" icon="arrow-right" href="/dashboard/approvals">
+    Configure approval thresholds and notification channels.
+  </Card>
+</CardGroup>

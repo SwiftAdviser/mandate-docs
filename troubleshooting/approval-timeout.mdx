@@ -1,0 +1,93 @@
+---
+title: "Approval Timeout"
+sidebarTitle: "Approval Timeout"
+description: "Diagnosing and recovering from expired approvals, with TTL reference and notification setup."
+---
+
+## What happens when an approval expires?
+
+When a transaction triggers an approval requirement, the intent enters `approval_pending` state with a 1-hour TTL. If the owner does not approve or reject within that window, the intent transitions to `expired`. The reserved quota is released, and the transaction must be re-validated to create a new approval request.
+
+After approval, the agent has a 10-minute window to broadcast the transaction. If the agent does not post a transaction hash within 10 minutes, the `approved` intent also expires.
+
+## TTL reference
+
+| State | TTL | What happens on expiry |
+|-------|-----|------------------------|
+| `approval_pending` | 1 hour | Intent moves to `expired`, quota released |
+| `approved` | 10 minutes | Intent moves to `expired`, quota released |
+
+## Common causes of timeout
+
+### Owner did not see the notification
+
+The owner may not have the dashboard open. By default, approval requests only appear in the dashboard. Set up Telegram or Slack notifications so the owner receives a push notification immediately.
+
+### Slow decision
+
+Some transactions need discussion before approval. If 1 hour is not enough, re-validate after expiry to restart the approval window.
+
+### Agent not polling
+
+The agent's `waitForApproval()` call may have timed out before the owner responded. Increase the `timeoutMs` parameter.
+
+## How to handle approval expiry in code
+
+```typescript
+import { ApprovalRequiredError, MandateError } from '@mandate.md/sdk';
+
+try {
+  await client.validate(payload);
+} catch (err) {
+  if (err instanceof ApprovalRequiredError) {
+    try {
+      const status = await client.waitForApproval(err.intentId, {
+        timeoutMs: 3600_000, // Match the 1-hour server TTL
+        onPoll: (s) => console.log(`Status: ${s.status}`),
+      });
+
+      if (status.status === 'approved') {
+        // Proceed with broadcast within 10 minutes
+      }
+    } catch (pollErr) {
+      if (pollErr instanceof MandateError && pollErr.message.includes('expired')) {
+        console.log('Approval expired. Re-validating...');
+        // Re-validate to create a new approval request
+        await client.validate(payload);
+      }
+    }
+  }
+}
+```
+
+## Set up notifications
+
+Reduce timeout risk by enabling real-time notifications:
+
+1. **Telegram**: Connect your Telegram account in the dashboard under Settings > Notifications. You receive a message with transaction details and approve/reject buttons.
+2. **Slack**: Add the Mandate Slack app to your workspace. Configure the channel in dashboard Settings > Notifications.
+3. **Dashboard**: Always available. Keep a browser tab open at `https://app.mandate.md/approvals`.
+
+With notifications enabled, the owner sees the approval request within seconds, reducing the chance of expiry.
+
+## Recovering from expired broadcasts
+
+If the intent reaches `approved` but the agent fails to broadcast within 10 minutes, the intent expires. Start the entire flow over: call `/validate` again, wait for a new approval, then broadcast promptly.
+
+<Tip>
+Design your agent to broadcast immediately after approval. Do not add delays between receiving the approved status and posting the transaction hash.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Handle Approvals" icon="user-check" href="/guides/handle-approvals">
+    Complete guide to implementing approval workflows.
+  </Card>
+  <Card title="Dashboard Notifications" icon="bell" href="/dashboard/notifications">
+    Configure Telegram, Slack, and webhook notifications.
+  </Card>
+  <Card title="Intent States" icon="list-check" href="/reference/intent-states">
+    Full state machine reference with all TTLs.
+  </Card>
+</CardGroup>

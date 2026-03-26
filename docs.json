@@ -1,0 +1,290 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Mandate",
+  "description": "Developer documentation for Mandate: non-custodial agent wallet policy layer that enforces spend limits, allowlists, and approval workflows for AI agent transactions.",
+  "theme": "maple",
+
+  "colors": {
+    "primary": "#10b981",
+    "light": "#34d399",
+    "dark": "#059669"
+  },
+
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://mandate.md"
+  },
+
+  "favicon": "/favicon.svg",
+
+  "appearance": {
+    "default": "dark",
+    "strict": false
+  },
+
+  "background": {
+    "decoration": "gradient",
+    "color": {
+      "light": "#ffffff",
+      "dark": "#0a0a0a"
+    }
+  },
+
+  "navbar": {
+    "links": [
+      { "type": "github", "href": "https://github.com/AIMandateProject/mandate" },
+      { "label": "Blog", "href": "https://mandate.md/blog" }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Dashboard",
+      "href": "https://app.mandate.md"
+    }
+  },
+
+  "footer": {
+    "socials": {
+      "x": "https://x.com/mandate_md",
+      "github": "https://github.com/AIMandateProject"
+    }
+  },
+
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "how-it-works",
+              "guides/choosing-integration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/intent-lifecycle",
+              "concepts/policy-engine",
+              "concepts/reason-field",
+              "concepts/non-custodial",
+              "concepts/intent-hash",
+              "concepts/glossary"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/register-agent",
+              "guides/validate-transactions",
+              "guides/handle-approvals",
+              "guides/handle-errors",
+              "guides/write-mandate-md",
+              "guides/x402-payments",
+              "guides/codebase-scanner",
+              "guides/fail-safe",
+              "guides/ci-cd"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "security/threat-model",
+              "security/prompt-injection",
+              "security/circuit-breaker",
+              "security/envelope-verification",
+              "security/reputation",
+              "security/risk-scanning",
+              "security/credential-management"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-errors",
+              "troubleshooting/intent-hash-mismatch",
+              "troubleshooting/circuit-breaker-tripped",
+              "troubleshooting/approval-timeout",
+              "troubleshooting/faq"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "SDK",
+        "groups": [
+          {
+            "group": "TypeScript SDK",
+            "pages": [
+              "sdk/overview",
+              "sdk/mandate-client",
+              "sdk/mandate-wallet",
+              "sdk/errors",
+              "sdk/types",
+              "sdk/intent-hash",
+              "sdk/constants"
+            ]
+          },
+          {
+            "group": "CLI",
+            "pages": [
+              "cli/overview",
+              "cli/login",
+              "cli/activate",
+              "cli/whoami",
+              "cli/validate",
+              "cli/transfer",
+              "cli/event",
+              "cli/status",
+              "cli/approve",
+              "cli/scan",
+              "cli/llms-flag",
+              "cli/mcp-flag"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Reference",
+            "pages": [
+              "api-reference/overview"
+            ]
+          },
+          {
+            "group": "Agent API",
+            "openapi": "/openapi.json",
+            "pages": [
+              "POST /api/agents/register",
+              "POST /api/activate",
+              "POST /api/validate",
+              "POST /api/validate/raw",
+              "POST /api/intents/{intentId}/events",
+              "GET /api/intents/{intentId}/status",
+              "POST /api/risk/check"
+            ]
+          },
+          {
+            "group": "Dashboard API",
+            "openapi": "/openapi.json",
+            "pages": [
+              "POST /api/agents/claim",
+              "POST /api/agents/create",
+              "PUT /api/agents/{agentId}",
+              "DELETE /api/agents/{agentId}",
+              "POST /api/agents/{agentId}/regenerate-key",
+              "GET /api/agents/{agentId}/policies",
+              "POST /api/agents/{agentId}/policies",
+              "POST /api/agents/{agentId}/circuit-break",
+              "GET /api/approvals",
+              "POST /api/approvals/{id}/decide"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Integrations",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": ["integrations/overview"]
+          },
+          {
+            "group": "Agent Frameworks",
+            "pages": [
+              "integrations/openclaw",
+              "integrations/claude-code",
+              "integrations/goat-sdk",
+              "integrations/agentkit",
+              "integrations/elizaos",
+              "integrations/game-virtuals",
+              "integrations/acp-virtuals",
+              "integrations/mcp-server",
+              "integrations/vercel-ai"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Dashboard",
+        "groups": [
+          {
+            "group": "Dashboard Guide",
+            "pages": [
+              "dashboard/overview",
+              "dashboard/agents",
+              "dashboard/policy-builder",
+              "dashboard/approvals",
+              "dashboard/audit-log",
+              "dashboard/circuit-breaker",
+              "dashboard/mandate-md-editor",
+              "dashboard/insights",
+              "dashboard/notifications",
+              "dashboard/webhooks"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Reference Tables",
+            "pages": [
+              "reference/block-reasons",
+              "reference/approval-triggers",
+              "reference/intent-states",
+              "reference/policy-fields",
+              "reference/chain-reference",
+              "reference/error-codes",
+              "reference/rate-limits"
+            ]
+          },
+          {
+            "group": "More",
+            "pages": [
+              "llms-skill",
+              "changelog"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+
+  "api": {
+    "openapi": "/openapi.json",
+    "playground": {
+      "display": "interactive"
+    },
+    "examples": {
+      "languages": ["bash", "javascript", "python"],
+      "autogenerate": true
+    }
+  },
+
+  "feedback": {
+    "thumbsRating": true,
+    "suggestEdit": true,
+    "raiseIssue": true
+  },
+
+  "seo": {
+    "indexing": "navigable"
+  },
+
+  "search": {
+    "prompt": "Search Mandate docs..."
+  },
+
+  "redirects": [
+    { "source": "/skill", "destination": "/llms-skill" },
+    { "source": "/docs", "destination": "/introduction" }
+  ]
+}

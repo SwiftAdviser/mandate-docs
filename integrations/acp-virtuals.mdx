@@ -1,0 +1,86 @@
+---
+title: "ACP (Agent Commerce Protocol)"
+sidebarTitle: "ACP / Virtuals"
+description: "Enforce Mandate spending policies on ACP inter-agent payments with the @mandate.md/acp-plugin."
+---
+
+## What is the ACP plugin?
+
+The `@mandate.md/acp-plugin` package adds Mandate policy enforcement to [ACP](https://docs.virtuals.io/acp) (Agent Commerce Protocol) by Virtuals Protocol. Before your agent approves an ACP job payment, the plugin validates the USD spend amount against your Mandate policies. If the policy blocks the payment, the job is automatically rejected.
+
+## Installation
+
+```bash
+bun add @mandate.md/acp-plugin
+```
+
+No additional peer dependencies. The package uses `@mandate.md/sdk` internally.
+
+## Usage
+
+```typescript
+import { MandateAcpClient } from '@mandate.md/acp-plugin';
+
+const acpClient = new MandateAcpClient({
+  acpApiKey: process.env.ACP_API_KEY!,
+  mandateRuntimeKey: process.env.MANDATE_RUNTIME_KEY!,
+});
+
+// Full flow: create job, wait for negotiation, validate with Mandate, pay
+const result = await acpClient.createAndPay(
+  '0xServiceProviderWallet',
+  'data-analysis',
+  { query: 'Analyze token holder distribution' },
+);
+
+if (result.blocked) {
+  console.log('Payment blocked:', result.blockReason);
+} else if (result.accepted) {
+  console.log('Job paid. ID:', result.jobId);
+}
+```
+
+The `createAndPay` method handles the entire flow: creates the job, polls until the provider responds with a price, validates the USD amount against Mandate, and approves or rejects the payment.
+
+## How validation works
+
+ACP payments go through ACP's smart wallet, not a direct EVM transaction. The plugin creates a synthetic ERC20 transfer payload (USDC on Base Sepolia) that represents the USD spend amount. This synthetic payload is validated against your Mandate policies, giving you the same spend limit enforcement as direct transfers.
+
+1. Agent calls `createAndPay()` or `payJob()`
+2. Plugin extracts the USD value from `paymentRequestData.budget`
+3. Plugin converts USD to raw USDC units (1 USD = 1,000,000 units)
+4. Plugin validates the synthetic transfer against Mandate
+5. On allowed: approves the ACP payment
+6. On blocked: rejects the ACP payment with the block reason
+
+## Methods
+
+| Method | Description |
+|--------|-------------|
+| `createAndPay(provider, offering, requirements)` | Full flow: create job, poll, validate, pay. Returns `CreateAndPayResult`. |
+| `payJob(jobId)` | Validate and pay an existing job in NEGOTIATION phase. Returns `JobPayResult`. |
+| `createJob(provider, offering, requirements)` | Create a job without automatic payment. |
+| `search(query)` | Search for ACP service providers (passthrough). |
+| `getJobStatus(jobId)` | Get current job status (passthrough). |
+
+## Exports
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `MandateAcpClient` | Class | Main client with policy-enforced payment methods |
+| `AcpClient` | Class | Raw ACP client without Mandate enforcement |
+| `MandateAcpConfig` | Type | Configuration: `acpApiKey`, `mandateRuntimeKey`, optional `mandateApiUrl`, `acpApiUrl` |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Integrations Overview" icon="grid-2" href="/integrations/overview">
+    Compare all Mandate integration options.
+  </Card>
+  <Card title="Validate Transactions" icon="shield-check" href="/guides/validate-transactions">
+    Understand how Mandate validates every spend request.
+  </Card>
+  <Card title="GAME SDK Plugin" icon="gamepad" href="/integrations/game-virtuals">
+    Use Mandate with GAME SDK for direct on-chain actions.
+  </Card>
+</CardGroup>

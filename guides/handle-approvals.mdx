@@ -1,0 +1,159 @@
+---
+title: "Handle Approval Workflows"
+sidebarTitle: "Handle Approvals"
+description: "Catch ApprovalRequiredError, poll for human decisions, and use MandateWallet shortcuts to handle the full approval flow in your agent code."
+---
+
+import ApprovalFlow from "/snippets/approval-flow.mdx";
+
+## When is approval required?
+
+The Mandate policy engine can require human approval before a transaction proceeds. Seven conditions trigger an approval request. If any one matches, the intent enters `approval_pending` state and waits for the owner's decision.
+
+| # | Trigger | Policy field / source |
+|---|---------|----------------------|
+| 1 | Amount above threshold | `require_approval_above_usd` |
+| 2 | Action requires approval | `require_approval_actions` (e.g. `["swap", "bridge"]`) |
+| 3 | Selector requires approval | `require_approval_selectors` (function selectors like `0xa9059cbb`) |
+| 4 | High risk flag from Aegis scanner | Risk score exceeds threshold |
+| 5 | Unknown agent (not registered on-chain, EIP-8004) | On-chain identity check |
+| 6 | Low reputation score | Reputation below minimum threshold |
+| 7 | Reason flagged by scanner | Prompt injection or suspicious intent detected in `reason` field |
+
+You configure the first three triggers in the [Policy Builder](/dashboard/policy-builder). The remaining four are system-level checks that Mandate runs automatically on every transaction.
+
+## How does the SDK signal an approval requirement?
+
+When a transaction passes policy checks but requires human sign-off, the SDK throws an `ApprovalRequiredError`. This is not a rejection. The intent is created and waiting for a decision. Your code catches the error, extracts the `intentId`, and polls until the owner approves or rejects.
+
+<ApprovalFlow />
+
+## Catching ApprovalRequiredError
+
+Here is the full pattern using `MandateClient` directly. This gives you maximum control over the wait behavior.
+
+<CodeGroup>
+```typescript TypeScript
+import { MandateClient, ApprovalRequiredError } from '@mandate/sdk';
+
+const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY! });
+
+try {
+  await client.validate({
+    action: 'transfer',
+    amount: '5000',
+    to: '0xRecipientAddress',
+    token: 'USDC',
+    reason: 'Large vendor payment',
+  });
+} catch (err) {
+  if (err instanceof ApprovalRequiredError) {
+    console.log(`Approval needed: ${err.approvalReason}`);
+    console.log(`Intent ID: ${err.intentId}`);
+
+    const status = await client.waitForApproval(err.intentId, {
+      timeoutMs: 3600_000,
+      intervalMs: 5_000,
+      onPoll: (s) => console.log(`Waiting... status: ${s.status}`),
+    });
+
+    if (status.status === 'approved') {
+      console.log('Approved. Proceeding with transaction.');
+    }
+  }
+}
+```
+
+```bash CLI
+npx @mandate/cli approve <intentId> --timeout 3600
+```
+
+```bash curl
+# Poll for approval status
+curl https://app.mandate.md/api/intents/<intentId>/status \
+  -H "Authorization: Bearer mndt_test_abc123"
+```
+</CodeGroup>
+
+The `waitForApproval()` method polls `GET /api/intents/{intentId}/status` at the specified interval. It resolves when the status becomes `approved` or `confirmed`. It throws a `MandateError` if the approval is rejected (`failed`) or times out (`expired`).
+
+### waitForApproval options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `timeoutMs` | `number` | `3600000` (1 hour) | Maximum time to wait before throwing a timeout error |
+| `intervalMs` | `number` | `5000` (5 seconds) | Polling interval between status checks |
+| `onPoll` | `(status) => void` | `undefined` | Callback fired after each poll. Use for logging or progress updates. |
+
+## MandateWallet shortcut
+
+`MandateWallet` provides `transferWithApproval()` and `sendTransactionWithApproval()` that handle the entire flow: validate, wait for approval if needed, sign, broadcast, and confirm. No manual try/catch required.
+
+```typescript
+import { MandateWallet } from '@mandate/sdk';
+
+const wallet = new MandateWallet({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  privateKey: process.env.PRIVATE_KEY! as `0x${string}`,
+  chainId: 84532,
+});
+
+const result = await wallet.transferWithApproval(
+  '0xRecipientAddress',
+  '50000000', // 50 USDC (6 decimals)
+  '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
+  {
+    reason: 'Large vendor payment',
+    approvalTimeoutMs: 3600_000,
+    onApprovalPending: (intentId, approvalId) =>
+      console.log(`Waiting for approval: ${intentId}`),
+    onApprovalPoll: (status) =>
+      console.log(`Status: ${status.status}`),
+  },
+);
+
+console.log(`Transaction confirmed: ${result.txHash}`);
+```
+
+If the policy does not require approval, these methods skip the wait and proceed directly. Your code works the same regardless of whether approval is needed.
+
+## How owners approve
+
+When a transaction enters `approval_pending`, the owner receives a notification through their configured channels:
+
+- **Dashboard**: The [Approvals page](/dashboard/approvals) shows pending requests with agent name, amount, action, reason, and risk level. One-click approve or reject with an optional note.
+- **Telegram bot**: Sends a formatted message with transaction details. The owner replies with approve or reject.
+- **Slack webhook**: Posts to the configured channel with action buttons.
+
+Each channel shows the same information: who is the agent, what it wants to do, how much, why, and the assessed risk level. The owner can add a note when approving or rejecting, which becomes part of the audit trail.
+
+<Note>
+Configure notification channels in [Dashboard > Notifications](/dashboard/notifications). You can enable multiple channels simultaneously. The first decision from any channel takes effect.
+</Note>
+
+## Approval TTLs
+
+Pending approvals expire after **1 hour** by default. This matches the `waitForApproval()` default timeout of `3600000ms`. After expiry, the intent transitions to `expired` state. The agent must call `validate()` again to create a new approval request.
+
+You cannot extend the TTL programmatically. If your workflow requires longer decision windows, contact support to adjust the server-side configuration.
+
+<Warning>
+Do not retry a timed-out approval by re-polling the same `intentId`. The intent is terminal once expired. Call `validate()` again to start a fresh approval request.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Approvals Dashboard" icon="check-double" href="/dashboard/approvals">
+    Review and manage pending approval requests from your agents.
+  </Card>
+  <Card title="Notifications" icon="bell" href="/dashboard/notifications">
+    Configure Telegram, Slack, and dashboard notification channels.
+  </Card>
+  <Card title="Approval Triggers Reference" icon="list" href="/reference/approval-triggers">
+    Full reference for all 7 approval trigger conditions and their policy fields.
+  </Card>
+  <Card title="MandateWallet" icon="wallet" href="/sdk/mandate-wallet">
+    High-level SDK with built-in approval handling via transferWithApproval().
+  </Card>
+</CardGroup>

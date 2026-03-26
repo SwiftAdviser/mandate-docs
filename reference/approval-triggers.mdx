@@ -1,0 +1,77 @@
+---
+title: "Approval Triggers"
+sidebarTitle: "Approval Triggers"
+description: "Reference for all 7 conditions that pause an agent transaction and route it to the owner for human approval."
+---
+
+## What are approval triggers?
+
+Approval triggers are soft blocks. Unlike hard blocks (which reject the transaction outright), an approval trigger pauses the transaction and sends it to the owner's approval queue. The intent enters `approval_pending` state with a 1-hour TTL. The owner reviews the transaction in the dashboard, Slack, or Telegram and approves or rejects it.
+
+Approval triggers only fire after all hard checks pass. You never see an approval request for a transaction that would fail a spend limit or allowlist check. This means approved transactions have already passed the full security and policy pipeline.
+
+## Approval trigger reference
+
+| Trigger | Condition | Policy Field | Who Configures |
+|---------|-----------|--------------|----------------|
+| `amount_above_threshold` | USD amount exceeds the configured threshold | `require_approval_above_usd` | Owner sets threshold in policy |
+| `action_requires_approval` | Action type (e.g., "bridge", "stake") is in the approval list | `require_approval_actions` | Owner adds actions to the list |
+| `selector_requires_approval` | 4-byte function selector is in the approval list (raw validation only) | `require_approval_selectors` | Owner adds selectors to the list |
+| `high_risk` | Aegis scanner flags the destination address as HIGH risk (not CRITICAL, which hard-blocks) | `risk_scan_enabled` | Automatic when risk scanning is on |
+| `unknown_agent` | Agent is not registered in the ERC-8004 on-chain registry | _(automatic)_ | No configuration needed |
+| `low_reputation` | Agent's on-chain reputation score is below 30 | _(automatic)_ | No configuration needed |
+| `reason_flagged` | Reason scanner flags the text for review (LLM judge returned `require_approval` instead of `block`) | _(automatic)_ | Triggers when the optional LLM judge runs |
+
+## How each trigger works
+
+### amount_above_threshold
+
+Set `require_approval_above_usd` in the policy. Any transaction with a USD amount above this threshold pauses for approval. Example: set to `500` and a $750 transfer triggers approval, while a $200 transfer passes through.
+
+This trigger is the most common starting point. It gives the owner oversight over high-value transactions while letting routine operations proceed automatically.
+
+### action_requires_approval
+
+Add action types to `require_approval_actions`. When the agent submits a validation request with a matching `action` field, the transaction pauses. Example: `["bridge", "stake", "bet"]` requires approval for bridging, staking, and betting while allowing transfers and swaps.
+
+### selector_requires_approval
+
+Add 4-byte function selectors to `require_approval_selectors`. This applies only to raw validation. Example: `["0x095ea7b3"]` (the ERC20 `approve` selector) requires human review before the agent can grant token approvals to other contracts.
+
+### high_risk
+
+When `risk_scan_enabled` is `true` (the default), Aegis screens the destination address. Addresses flagged as HIGH risk trigger an approval request. CRITICAL risk addresses produce a hard block (`aegis_critical_risk`) instead.
+
+### unknown_agent and low_reputation
+
+These triggers use the ERC-8004 on-chain agent reputation registry. Agents not found in the registry trigger `unknown_agent`. Agents with a reputation score below 30 trigger `low_reputation`. These are automatic and require no policy configuration.
+
+### reason_flagged
+
+The optional LLM judge analyzes the reason field and may return `require_approval` instead of a hard `block`. This happens when the text is suspicious but not definitively malicious. The owner sees the flagged reason and makes the final call.
+
+## Multiple triggers
+
+Multiple triggers can fire on the same transaction. The approval request includes all trigger reasons in a combined message. The owner sees the full picture: which checks triggered, the agent's stated reason, the USD amount, and the destination address.
+
+```json
+{
+  "requiresApproval": true,
+  "approvalReason": "amount_above_threshold, unknown_agent",
+  "approvalId": "apr_abc123"
+}
+```
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Handle Approvals" icon="user-check" href="/guides/handle-approvals">
+    Implement approval workflows with polling and timeout handling.
+  </Card>
+  <Card title="Dashboard Approvals" icon="check-double" href="/dashboard/approvals">
+    Review and decide on pending approvals in the dashboard.
+  </Card>
+  <Card title="Policy Fields" icon="sliders" href="/reference/policy-fields">
+    Configure approval thresholds and action lists in the policy schema.
+  </Card>
+</CardGroup>

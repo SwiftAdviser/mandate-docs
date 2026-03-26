@@ -1,0 +1,299 @@
+---
+title: "TypeScript Types"
+sidebarTitle: "Types"
+description: "All exported TypeScript interfaces from the Mandate SDK, with field descriptions and usage notes."
+---
+
+Every type listed here is exported from `@mandate/sdk`:
+
+```typescript
+import type {
+  MandateConfig,
+  MandateWalletConfig,
+  PreflightPayload,
+  PreflightResult,
+  ValidateResult,
+  IntentPayload,
+  IntentStatus,
+  RegisterResult,
+  ExternalSigner,
+  TransferResult,
+} from '@mandate/sdk';
+```
+
+---
+
+## MandateConfig
+
+Base configuration for `MandateClient`. Pass your runtime key and an optional custom API URL.
+
+```typescript
+interface MandateConfig {
+  runtimeKey: string;
+  baseUrl?: string;
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `runtimeKey` | `string` | Yes | Your `mndt_live_...` or `mndt_test_...` runtime key |
+| `baseUrl` | `string` | No | Mandate API URL. Defaults to `https://app.mandate.md` |
+
+---
+
+## MandateWalletConfig
+
+Configuration for `MandateWallet`. Extends `MandateConfig` with chain and signer options. You must provide either `privateKey` or `signer`, not both.
+
+```typescript
+interface MandateWalletConfig extends MandateConfig {
+  chainId: number;
+  privateKey?: `0x${string}`;
+  signer?: ExternalSigner;
+  rpcUrl?: string;
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `chainId` | `number` | Yes | Target chain ID (e.g. `84532` for Base Sepolia, `8453` for Base) |
+| `privateKey` | `` `0x${string}` `` | No | Raw hex private key. Use this for simple setups. |
+| `signer` | `ExternalSigner` | No | External wallet adapter. Use this for AgentKit, Privy, or custom signers. |
+| `rpcUrl` | `string` | No | Custom RPC endpoint. Defaults to Base Sepolia/Base public RPCs. |
+
+---
+
+## PreflightPayload
+
+Input for the action-based `validate()` method on `MandateClient`. Describes the intended action in human-readable terms.
+
+```typescript
+interface PreflightPayload {
+  action: string;
+  amount?: string;
+  to?: string;
+  token?: string;
+  reason: string;
+  chain?: string;
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `action` | `string` | Yes | Action type (e.g. `"transfer"`, `"swap"`, `"approve"`) |
+| `amount` | `string` | No | Human-readable amount (e.g. `"5.00"`) |
+| `to` | `string` | No | Destination address |
+| `token` | `string` | No | Token symbol or address (e.g. `"USDC"`) |
+| `reason` | `string` | Yes | Why the agent wants to perform this action |
+| `chain` | `string` | No | Chain name or ID (e.g. `"base-sepolia"`) |
+
+---
+
+## PreflightResult
+
+Response from `validate()`. Extends `ValidateResult` with the action field echoed back.
+
+```typescript
+interface PreflightResult extends ValidateResult {
+  action: string;
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `allowed` | `boolean` | Whether the action is permitted |
+| `intentId` | `string \| null` | Intent ID if a reservation was created |
+| `requiresApproval` | `boolean` | Whether human approval is needed |
+| `approvalId` | `string \| null` | Approval request ID, if applicable |
+| `approvalReason` | `string \| null` | Why approval is required |
+| `blockReason` | `string \| null` | Reason code if blocked |
+| `blockDetail` | `string \| null` | Additional detail about the block |
+| `action` | `string` | The action that was evaluated |
+
+---
+
+## ValidateResult
+
+Response from `rawValidate()`. Contains the policy decision and intent metadata.
+
+```typescript
+interface ValidateResult {
+  allowed: boolean;
+  intentId: string | null;
+  requiresApproval: boolean;
+  approvalId: string | null;
+  approvalReason?: string | null;
+  blockReason: string | null;
+  blockDetail?: string | null;
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `allowed` | `boolean` | Whether the transaction is permitted |
+| `intentId` | `string \| null` | Intent ID for tracking. `null` if blocked. |
+| `requiresApproval` | `boolean` | Whether human approval is needed before proceeding |
+| `approvalId` | `string \| null` | Approval request ID for polling |
+| `approvalReason` | `string \| null` | Human-readable reason for requiring approval |
+| `blockReason` | `string \| null` | Machine-readable block reason (e.g. `spend_limit_exceeded`) |
+| `blockDetail` | `string \| null` | Additional context from the policy engine |
+
+---
+
+## IntentPayload
+
+Full transaction parameters for `rawValidate()`. Used in self-custodial signing flows where you compute gas parameters yourself.
+
+```typescript
+interface IntentPayload {
+  chainId: number;
+  nonce: number;
+  to: `0x${string}`;
+  calldata: `0x${string}`;
+  valueWei: string;
+  gasLimit: string;
+  maxFeePerGas: string;
+  maxPriorityFeePerGas: string;
+  txType?: number;
+  accessList?: unknown[];
+  intentHash: `0x${string}`;
+  reason: string;
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `chainId` | `number` | Yes | Target chain ID |
+| `nonce` | `number` | Yes | Sender's transaction nonce |
+| `to` | `` `0x${string}` `` | Yes | Destination address |
+| `calldata` | `` `0x${string}` `` | Yes | Encoded transaction data (`0x` for native transfers) |
+| `valueWei` | `string` | Yes | Native token value in wei |
+| `gasLimit` | `string` | Yes | Gas limit |
+| `maxFeePerGas` | `string` | Yes | EIP-1559 max fee per gas |
+| `maxPriorityFeePerGas` | `string` | Yes | EIP-1559 priority fee per gas |
+| `txType` | `number` | No | Transaction type. Defaults to `2` (EIP-1559). |
+| `accessList` | `unknown[]` | No | EIP-2930 access list. Defaults to `[]`. |
+| `intentHash` | `` `0x${string}` `` | Yes | Keccak256 hash of canonical tx params. See [Intent Hash](/sdk/intent-hash). |
+| `reason` | `string` | Yes | Why the agent is making this transaction |
+
+---
+
+## IntentStatus
+
+Status of a tracked intent. Returned by `getStatus()`, `waitForApproval()`, and `waitForConfirmation()`.
+
+```typescript
+interface IntentStatus {
+  intentId: string;
+  status: 'reserved' | 'approval_pending' | 'approved' | 'broadcasted' | 'confirmed' | 'failed' | 'expired';
+  txHash: string | null;
+  blockNumber: string | null;
+  gasUsed: string | null;
+  amountUsd: string | null;
+  decodedAction: string | null;
+  summary: string | null;
+  blockReason: string | null;
+  requiresApproval: boolean;
+  approvalId: string | null;
+  expiresAt: string | null;
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `intentId` | `string` | Unique intent identifier |
+| `status` | `string` | Current state: `reserved`, `approval_pending`, `approved`, `broadcasted`, `confirmed`, `failed`, or `expired` |
+| `txHash` | `string \| null` | On-chain transaction hash (set after broadcast) |
+| `blockNumber` | `string \| null` | Block number where tx was confirmed |
+| `gasUsed` | `string \| null` | Actual gas consumed |
+| `amountUsd` | `string \| null` | USD value of the transaction |
+| `decodedAction` | `string \| null` | Human-readable decoded action (e.g. `"transfer 5 USDC"`) |
+| `summary` | `string \| null` | One-line summary of the transaction |
+| `blockReason` | `string \| null` | Reason if the intent was blocked or failed |
+| `requiresApproval` | `boolean` | Whether approval is still pending |
+| `approvalId` | `string \| null` | Approval request ID |
+| `expiresAt` | `string \| null` | ISO 8601 expiration timestamp for approval window |
+
+---
+
+## RegisterResult
+
+Response from `MandateClient.register()`. Contains credentials for the newly registered agent.
+
+```typescript
+interface RegisterResult {
+  agentId: string;
+  runtimeKey: string;
+  claimUrl: string;
+  evmAddress: string;
+  chainId: number;
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `agentId` | `string` | Unique agent identifier |
+| `runtimeKey` | `string` | Runtime key (`mndt_live_...` or `mndt_test_...`) for API auth |
+| `claimUrl` | `string` | URL for the agent owner to claim and link the agent to their dashboard |
+| `evmAddress` | `string` | The agent's EVM wallet address |
+| `chainId` | `number` | The chain the agent registered on |
+
+---
+
+## ExternalSigner
+
+Interface for plugging in any wallet that can send transactions. Implement this to use AgentKit, Privy, or any custom wallet with `MandateWallet`.
+
+```typescript
+interface ExternalSigner {
+  sendTransaction(tx: {
+    to: `0x${string}`;
+    data: `0x${string}`;
+    value: bigint;
+    gas: bigint;
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+    nonce?: number;
+  }): Promise<`0x${string}`>;
+  getAddress(): Promise<`0x${string}`> | `0x${string}`;
+}
+```
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `sendTransaction(tx)` | `Promise<\`0x\${string}\`>` | Sign and broadcast the transaction. Return the tx hash. |
+| `getAddress()` | `Promise<\`0x\${string}\`> \| \`0x\${string}\`` | Return the wallet address. Can be sync or async. |
+
+The `tx` object passed to `sendTransaction` contains all fields needed for an EIP-1559 transaction. `maxFeePerGas`, `maxPriorityFeePerGas`, and `nonce` are optional because some signers manage these internally.
+
+---
+
+## TransferResult
+
+Returned by `MandateWallet.transfer()`, `sendTransaction()`, and related methods. Contains the transaction hash, intent ID, and final status.
+
+```typescript
+interface TransferResult {
+  txHash: Hash;
+  intentId: string;
+  status: IntentStatus;
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `txHash` | `Hash` | On-chain transaction hash (viem `Hash` type, which is `` `0x${string}` ``) |
+| `intentId` | `string` | Mandate intent ID for audit trail and status polling |
+| `status` | `IntentStatus` | Final intent status after broadcast and optional confirmation wait |
+
+<CardGroup cols={3}>
+  <Card title="MandateClient" icon="code" href="/sdk/mandate-client">
+    Low-level API client that uses these types.
+  </Card>
+  <Card title="MandateWallet" icon="wallet" href="/sdk/mandate-wallet">
+    High-level wallet wrapper with signing and broadcasting.
+  </Card>
+  <Card title="Errors" icon="triangle-exclamation" href="/sdk/errors">
+    Error classes thrown when validation fails.
+  </Card>
+</CardGroup>

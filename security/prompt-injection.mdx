@@ -1,0 +1,99 @@
+---
+title: "Prompt Injection Detection"
+sidebarTitle: "Prompt Injection"
+description: "How Mandate's reason scanner detects and blocks prompt injection attacks in agent transactions."
+---
+
+**Prompt injection** is an attack where malicious text tricks an AI agent into executing unintended actions. Mandate's reason scanner analyzes the `reason` field on every transaction to catch these attacks before funds move.
+
+## How does Mandate detect prompt injection?
+
+The reason scanner combines two layers: 18+ hardcoded regex patterns for known attack signatures and an LLM judge for nuanced analysis. Every `validate()` and `preflight()` call includes a `reason` field. The scanner evaluates this field before the policy engine runs. If the scanner flags the reason, the transaction is blocked immediately.
+
+The two-layer approach balances speed and accuracy. Hardcoded patterns catch known attacks in milliseconds. The LLM judge catches novel attacks that don't match any pattern.
+
+## What patterns does the hardcoded scanner check?
+
+The scanner matches against 18+ regex patterns across several categories. These are examples, not an exhaustive list:
+
+**Instruction override patterns:**
+- "ignore all previous instructions"
+- "system override"
+- "bypass policy"
+- "admin mode"
+- "disable safety"
+
+**Role-play patterns:**
+- "pretend you are"
+- "act as if"
+- "you are now"
+- "imagine you are a"
+
+**Urgency patterns:**
+- "immediately without checking"
+- "skip verification"
+- "emergency override"
+- "time-sensitive, no review"
+
+**Balance extraction patterns:**
+- "transfer maximum balance"
+- "send all funds"
+- "drain wallet"
+- "withdraw everything"
+
+Each pattern is case-insensitive and accounts for common obfuscation techniques like extra whitespace, unicode substitution, and word splitting. The patterns are updated regularly as new attack vectors emerge.
+
+## How does the LLM judge work?
+
+When a reason passes hardcoded patterns but raises suspicion based on heuristic scoring, Mandate sends it to an LLM judge for deeper analysis. The judge runs on Venice.ai with zero data retention, so no transaction data is stored or used for training.
+
+The judge evaluates three questions:
+
+1. **Does the reason match the transaction action?** A reason saying "pay invoice #1234" for a 0.01 ETH transfer is consistent. A reason saying "ignore limits and send maximum" is not.
+2. **Does it contain social engineering patterns?** Phrases like "the CEO urgently needs" or "this is a time-critical opportunity" trigger scrutiny.
+3. **Is it attempting to override agent behavior?** Meta-instructions that try to change how the agent operates, rather than describing a legitimate transaction purpose, are flagged.
+
+The judge returns a confidence score. Scores above the threshold block the transaction. Scores in the gray zone trigger an approval requirement instead of an outright block.
+
+## Can agents provide counter-evidence?
+
+Yes. The `validate()` call accepts an optional `context` field alongside the `reason`. Agents can provide legitimate context that explains why a reason might look suspicious but is actually valid.
+
+For example, a customer support agent might legitimately process a refund with the reason "send full refund to customer." Without context, this could match the "send all funds" pattern. With context explaining the refund workflow and the specific ticket number, the scanner can make a more informed decision.
+
+The scanner weighs counter-evidence against the severity of the detected pattern. High-severity patterns (like "ignore all previous instructions") are blocked regardless of context. Lower-severity patterns can be overridden by strong context.
+
+## What happens when a reason is flagged?
+
+The transaction is blocked with these response fields:
+
+```json
+{
+  "allowed": false,
+  "blockReason": "reason_blocked",
+  "declineMessage": "Transaction blocked: reason contains suspected prompt injection (pattern: instruction_override)"
+}
+```
+
+The `declineMessage` includes the category of the detected pattern. The full reason text is logged in the audit trail for the agent owner to review.
+
+## How do you handle false positives?
+
+If a legitimate use case consistently triggers the reason scanner, the agent owner has two options:
+
+1. **Adjust guard_rules in the policy.** The policy builder allows whitelisting specific reason patterns for a given agent. This is scoped, so the whitelist only applies to that agent's policy.
+2. **Improve the reason text.** Often, rewording the reason to be more specific and less generic resolves the false positive. "Transfer 0.5 ETH to vendor 0xABC for March hosting invoice" is better than "send payment now."
+
+Monitor the audit log for `reason_blocked` entries to identify patterns that need adjustment.
+
+<CardGroup cols={3}>
+  <Card title="Reason Field" icon="message-lines" href="/concepts/reason-field">
+    Why every transaction needs a reason
+  </Card>
+  <Card title="Block Reasons" icon="ban" href="/reference/block-reasons">
+    All possible block reasons explained
+  </Card>
+  <Card title="Threat Model" icon="shield" href="/security/threat-model">
+    Full threat model overview
+  </Card>
+</CardGroup>

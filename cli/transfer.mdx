@@ -1,0 +1,128 @@
+---
+title: "mandate transfer"
+sidebarTitle: "transfer"
+description: "Validate an ERC20 transfer against your agent's policy. Preflight mode by default, raw mode for legacy self-custodial flows."
+---
+
+## What does transfer do?
+
+The `transfer` command validates an ERC20 token transfer against the policy engine. It sets `action` to `transfer` automatically, so you only provide the recipient, amount, token, and reason. This is a convenience wrapper around `validate` for the most common operation.
+
+```bash
+npx @mandate.md/cli transfer \
+  --to 0xRecipientAddress \
+  --amount 50 \
+  --token USDC \
+  --reason "Payment for services"
+```
+
+## Options
+
+| Flag | Required | Description |
+|------|:---:|-------------|
+| `--to` | Yes | Recipient address (0x...) |
+| `--amount` | Yes | Amount in token units |
+| `--token` | Yes | Token symbol (e.g. `USDC`) or contract address |
+| `--reason` | Yes | Why this transfer is being sent |
+| `--chain` | No | Chain name or ID (preflight mode) |
+| `--raw` | No | Use raw EVM validation (legacy) |
+
+### Raw mode flags (only with `--raw`)
+
+| Flag | Required | Default | Description |
+|------|:---:|---------|-------------|
+| `--nonce` | Yes | - | Transaction nonce |
+| `--maxFeePerGas` | Yes | - | Max fee per gas (wei) |
+| `--maxPriorityFeePerGas` | Yes | - | Max priority fee per gas (wei) |
+| `--gasLimit` | No | `65000` | Gas limit |
+| `--chainId` | No | From credentials | Chain ID |
+
+## Preflight mode (default)
+
+In preflight mode, the command sends an action-based validation request. No gas parameters needed.
+
+```bash
+npx @mandate.md/cli transfer \
+  --to 0x036CbD53842c5426634e7929541eC2318f3dCF7e \
+  --amount 10 \
+  --token USDC \
+  --reason "Invoice #42"
+```
+
+### Output
+
+```json
+{
+  "ok": true,
+  "intentId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "feedback": "Mandate: policy check passed"
+}
+```
+
+If the policy blocks the transfer, the output includes `error` and `blockReason`:
+
+```json
+{
+  "error": "POLICY_BLOCKED",
+  "message": "Mandate: blocked: amount exceeds daily limit",
+  "blockReason": "SPEND_LIMIT_PER_DAY"
+}
+```
+
+If approval is required, the output includes the `intentId` and a `next` field pointing to `mandate approve`.
+
+## Raw mode (legacy)
+
+<Info>
+**Deprecated.** Use preflight mode instead. Raw mode is kept for legacy self-custodial flows.
+</Info>
+
+Raw mode encodes the ERC20 `transfer(address,uint256)` calldata, computes the `intentHash`, and sends a raw validation request. On success, it returns the unsigned transaction for manual signing.
+
+```bash
+npx @mandate.md/cli transfer --raw \
+  --to 0xRecipientAddress \
+  --amount 10000000 \
+  --token 0x036CbD53842c5426634e7929541eC2318f3dCF7e \
+  --reason "Invoice #127" \
+  --nonce 42 \
+  --maxFeePerGas 1000000000 \
+  --maxPriorityFeePerGas 1000000000
+```
+
+### Raw mode output
+
+```json
+{
+  "ok": true,
+  "intentId": "a1b2c3d4-...",
+  "feedback": "Mandate: policy check passed",
+  "unsignedTx": {
+    "to": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "calldata": "0xa9059cbb...",
+    "value": "0",
+    "gasLimit": "65000",
+    "maxFeePerGas": "1000000000",
+    "maxPriorityFeePerGas": "1000000000",
+    "nonce": 42,
+    "chainId": 84532
+  },
+  "next": "Run: mandate event a1b2c3d4-... --tx-hash 0x..."
+}
+```
+
+Sign the `unsignedTx` with your private key, broadcast it, then post the txHash with `mandate event`.
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Post Transaction Hash" icon="arrow-right" href="/cli/event">
+    Report the txHash after signing and broadcasting.
+  </Card>
+  <Card title="Check Intent Status" icon="arrow-right" href="/cli/status">
+    Poll the intent state until confirmed.
+  </Card>
+  <Card title="MandateWallet SDK" icon="arrow-right" href="/sdk/mandate-wallet">
+    Automate the full flow programmatically with the TypeScript SDK.
+  </Card>
+</CardGroup>

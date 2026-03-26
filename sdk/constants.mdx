@@ -1,0 +1,88 @@
+---
+title: "Constants Reference"
+sidebarTitle: "Constants"
+description: "USDC contract addresses and chain ID constants exported by the Mandate SDK for mainnet and testnet networks."
+---
+
+## What constants does the SDK export?
+
+The SDK exports two convenience objects: `USDC` for contract addresses and `CHAIN_ID` for network identifiers. These cover the four chains Mandate supports. Use them instead of hardcoding addresses and chain IDs in your agent code.
+
+## USDC addresses
+
+```typescript
+import { USDC } from '@mandate/sdk';
+
+USDC.ETH_MAINNET  // 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
+USDC.ETH_SEPOLIA  // 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+USDC.BASE_MAINNET // 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+USDC.BASE_SEPOLIA // 0x036CbD53842c5426634e7929541eC2318f3dCF7e
+```
+
+| Network | Chain | Address |
+|---------|-------|---------|
+| **Mainnet** | Ethereum | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |
+| **Mainnet** | Base | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| **Testnet** | Ethereum Sepolia | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` |
+| **Testnet** | Base Sepolia | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
+
+## Chain IDs
+
+```typescript
+import { CHAIN_ID } from '@mandate/sdk';
+
+CHAIN_ID.ETH_MAINNET  // 1
+CHAIN_ID.ETH_SEPOLIA  // 11155111
+CHAIN_ID.BASE_MAINNET // 8453
+CHAIN_ID.BASE_SEPOLIA // 84532
+```
+
+| Network | Chain | ID |
+|---------|-------|----|
+| **Mainnet** | Ethereum | `1` |
+| **Mainnet** | Base | `8453` |
+| **Testnet** | Ethereum Sepolia | `11155111` |
+| **Testnet** | Base Sepolia | `84532` |
+
+## Runtime keys and chain mapping
+
+Your runtime key prefix determines which chains your agent can use.
+
+| Key prefix | Environment | Chains |
+|------------|-------------|--------|
+| `mndt_test_*` | Testnet | Ethereum Sepolia, Base Sepolia |
+| `mndt_live_*` | Production | Ethereum Mainnet, Base Mainnet |
+
+<Warning>
+Test keys only work with testnet chains. Live keys only work with mainnet chains. If you pass a testnet chain ID with a live key, the API returns a 422 error.
+</Warning>
+
+Use test keys during development. They connect to the same policy engine and return the same validation responses, but all transactions go to Sepolia testnets where tokens have no real value.
+
+```typescript
+import { MandateClient, USDC, CHAIN_ID } from '@mandate/sdk';
+
+const client = new MandateClient({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!, // mndt_test_* for testnet
+});
+
+const result = await client.validate({
+  action: 'transfer',
+  amount: '5',
+  to: '0xRecipientAddress',
+  token: 'USDC',
+  chain: String(CHAIN_ID.BASE_SEPOLIA),
+  reason: 'Test payment for development',
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Chain Reference" icon="arrow-right" href="/reference/chain-reference">
+    Full chain support details, RPC endpoints, and block explorers.
+  </Card>
+  <Card title="SDK Overview" icon="arrow-right" href="/sdk/overview">
+    Installation, exports, and quick start guide.
+  </Card>
+</CardGroup>

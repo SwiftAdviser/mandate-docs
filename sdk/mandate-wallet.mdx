@@ -1,0 +1,366 @@
+---
+title: "MandateWallet"
+sidebarTitle: "MandateWallet"
+description: "High-level policy-enforced wallet that validates, signs, broadcasts, and confirms transactions in one call using viem."
+---
+
+## What is MandateWallet?
+
+`MandateWallet` wraps `MandateClient` with a viem signing layer. You call a single method like `transfer()` and it handles the entire flow: estimate gas, compute `intentHash`, validate against your policies, sign locally, broadcast, post the event, and wait for on-chain confirmation. Your private key never leaves your machine.
+
+## Constructor
+
+`MandateWallet` accepts a `MandateWalletConfig` object. You must provide either a `privateKey` or a `signer`, not both.
+
+### Variant 1: Private key
+
+Pass a raw hex private key directly. The SDK creates a viem wallet client internally.
+
+```typescript
+import { MandateWallet } from '@mandate/sdk';
+
+const wallet = new MandateWallet({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  privateKey: process.env.AGENT_PRIVATE_KEY! as `0x${string}`,
+  chainId: 84532,
+  rpcUrl: 'https://sepolia.base.org', // optional
+});
+```
+
+### Variant 2: External signer
+
+Wrap any existing wallet (Privy, AgentKit, Fireblocks) with the `ExternalSigner` interface. The SDK delegates signing to your implementation.
+
+```typescript
+import { MandateWallet } from '@mandate/sdk';
+
+const wallet = new MandateWallet({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  signer: myCustomSigner, // implements ExternalSigner
+  chainId: 84532,
+});
+```
+
+### MandateWalletConfig
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `runtimeKey` | `string` | Yes | Agent runtime key (`mndt_test_*` or `mndt_live_*`) |
+| `chainId` | `number` | Yes | `84532` (Base Sepolia) or `8453` (Base Mainnet) |
+| `privateKey` | `` `0x${string}` `` | One of | Raw hex private key |
+| `signer` | `ExternalSigner` | One of | Custom wallet implementing `ExternalSigner` |
+| `baseUrl` | `string` | No | Mandate API URL. Default: `https://app.mandate.md` |
+| `rpcUrl` | `string` | No | Custom RPC endpoint. Default: chain-specific public RPC |
+
+## Properties
+
+### `wallet.address`
+
+Synchronous getter. Returns the wallet's `0x${string}` address. If you use an external signer whose `getAddress()` returns a Promise, this throws until the address is resolved. Use `getAddress()` instead.
+
+```typescript
+console.log(wallet.address); // 0x1234...abcd
+```
+
+### `wallet.getAddress()`
+
+Async-safe version. Returns `Promise<0x${string}>`. Works with both private key and external signer variants. Always prefer this in async contexts.
+
+```typescript
+const address = await wallet.getAddress();
+```
+
+## Methods
+
+### `wallet.transfer(to, rawAmount, tokenAddress, opts?)`
+
+Send an ERC20 token transfer with full policy enforcement. The SDK encodes the ERC20 `transfer(address,uint256)` calldata internally using the built-in ABI.
+
+```typescript
+const { txHash, intentId, status } = await wallet.transfer(
+  '0xRecipientAddress',
+  '5000000',  // 5 USDC (6 decimals, raw amount)
+  '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
+  { reason: 'Vendor payment for March services' },
+);
+```
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `to` | `` `0x${string}` `` | Recipient address |
+| `rawAmount` | `string` | Token amount in smallest unit (e.g. `'5000000'` for 5 USDC) |
+| `tokenAddress` | `` `0x${string}` `` | ERC20 contract address |
+| `opts.reason` | `string` | Human-readable reason for audit log |
+| `opts.waitForConfirmation` | `boolean` | Wait for on-chain confirmation. Default: `true` |
+
+**Returns:** `TransferResult`
+
+```typescript
+interface TransferResult {
+  txHash: Hash;        // On-chain transaction hash
+  intentId: string;    // Mandate intent ID for status tracking
+  status: IntentStatus; // Current intent status object
+}
+```
+
+**Internal flow:** estimate gas (with 1.2x buffer) -> compute `intentHash` -> call `rawValidate` -> sign locally -> broadcast -> `postEvent` -> `waitForConfirmation`.
+
+<Warning>
+Pass amounts in the token's smallest unit (raw). For USDC with 6 decimals, 5 USDC = `'5000000'`. The SDK does not perform decimal conversion.
+</Warning>
+
+### `wallet.sendEth(to, valueWei, opts?)`
+
+Send native ETH (or the chain's native token). Same policy enforcement flow as `transfer`, but with `0x` calldata and the value in wei.
+
+```typescript
+const result = await wallet.sendEth(
+  '0xRecipientAddress',
+  '10000000000000000', // 0.01 ETH in wei
+  { reason: 'Gas refill for operations wallet' },
+);
+```
+
+### `wallet.sendTransaction(to, calldata, valueWei?, opts?)`
+
+General-purpose method for calling any contract function. Use this when you need to interact with a contract beyond simple ERC20 transfers.
+
+```typescript
+import { encodeFunctionData } from 'viem';
+
+const calldata = encodeFunctionData({
+  abi: myContractAbi,
+  functionName: 'executeSwap',
+  args: [tokenIn, tokenOut, amountIn],
+});
+
+const result = await wallet.sendTransaction(
+  '0xContractAddress',
+  calldata,
+  '0', // no ETH value
+  { reason: 'DEX swap: USDC to WETH' },
+);
+```
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `to` | `` `0x${string}` `` | | Target contract address |
+| `calldata` | `` `0x${string}` `` | | Encoded function call |
+| `valueWei` | `string` | `'0'` | Native token value in wei |
+| `opts.reason` | `string` | | Reason for audit log |
+| `opts.waitForConfirmation` | `boolean` | `true` | Wait for on-chain confirmation |
+
+### `wallet.sendTransactionWithApproval(to, calldata, valueWei?, opts?)`
+
+Same as `sendTransaction`, but catches `ApprovalRequiredError` and polls for human approval before proceeding. Use this when your policy includes approval rules and the agent should wait rather than fail.
+
+```typescript
+const result = await wallet.sendTransactionWithApproval(
+  '0xContractAddress',
+  calldata,
+  '0',
+  {
+    reason: 'Large transfer requires manager sign-off',
+    approvalTimeoutMs: 300_000, // 5 minutes
+    onApprovalPending: (intentId, approvalId) => {
+      console.log(`Waiting for approval: ${approvalId}`);
+    },
+    onApprovalPoll: (status) => {
+      console.log(`Status: ${status.status}`);
+    },
+  },
+);
+```
+
+**Extra options:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `opts.approvalTimeoutMs` | `number` | Max time to wait for approval before timing out |
+| `opts.onApprovalPending` | `(intentId, approvalId) => void` | Called when approval is requested |
+| `opts.onApprovalPoll` | `(status: IntentStatus) => void` | Called on each poll iteration |
+
+**Flow:** If `rawValidate` throws `ApprovalRequiredError`, the method calls `onApprovalPending`, then polls `waitForApproval` until the human approves or rejects. On approval, it signs, broadcasts, and confirms as usual. On rejection or timeout, it throws.
+
+### `wallet.transferWithApproval(to, rawAmount, tokenAddress, opts?)`
+
+ERC20 transfer with built-in approval wait support. Combines the ERC20 encoding of `transfer()` with the approval polling of `sendTransactionWithApproval()`.
+
+```typescript
+const result = await wallet.transferWithApproval(
+  '0xRecipientAddress',
+  '50000000', // 50 USDC
+  '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  {
+    reason: 'Monthly contractor payment',
+    approvalTimeoutMs: 600_000,
+    onApprovalPending: (intentId, approvalId) => {
+      notifySlack(`Approval needed: ${approvalId}`);
+    },
+  },
+);
+```
+
+Accepts the same `opts` as `sendTransactionWithApproval`.
+
+### `wallet.x402Pay(url, opts?)`
+
+Execute an [x402](https://www.x402.org/) payment flow. The method probes the URL, detects a `402 Payment Required` response, parses the payment details from the `X-Payment-Required` header, transfers the requested amount, and retries the original request with the transaction hash.
+
+```typescript
+const response = await wallet.x402Pay(
+  'https://api.example.com/premium-endpoint',
+  {
+    headers: { 'Authorization': 'Bearer my-api-key' },
+    reason: 'x402 payment for premium API access',
+  },
+);
+
+const data = await response.json();
+```
+
+**Parameters:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `url` | `string` | The URL to request |
+| `opts.headers` | `Record<string, string>` | Additional request headers |
+| `opts.reason` | `string` | Reason for audit log |
+
+**Returns:** The final `Response` object from the retry request. If the initial request does not return 402, it returns that response directly (no payment attempted).
+
+### `wallet.preflightTransfer(params)`
+
+Lightweight policy check without signing or broadcasting. Uses the action-based `validate()` endpoint under the hood. Use this to check if a transfer would pass your policies before committing to the full flow.
+
+```typescript
+const check = await wallet.preflightTransfer({
+  to: '0xRecipientAddress',
+  amount: '50',
+  token: 'USDC',
+  reason: 'Check if vendor payment is allowed',
+});
+
+if (check.allowed) {
+  // Proceed with actual transfer
+  await wallet.transfer(/* ... */);
+}
+```
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `params.to` | `` `0x${string}` `` | Yes | Recipient address |
+| `params.amount` | `string` | Yes | Human-readable amount (e.g. `'50'`) |
+| `params.token` | `string` | No | Token symbol (e.g. `'USDC'`) |
+| `params.reason` | `string` | Yes | Reason for the transfer |
+
+**Returns:** `PreflightResult` with `allowed`, `intentId`, `requiresApproval`, and `blockReason` fields.
+
+<Tip>
+`preflightTransfer` uses human-readable amounts (e.g. `'50'` for 50 USDC), unlike `transfer()` which requires raw amounts in the token's smallest unit.
+</Tip>
+
+## ExternalSigner interface
+
+Implement this interface to use any wallet provider with `MandateWallet`. You provide the signing logic; Mandate handles policy validation.
+
+```typescript
+interface ExternalSigner {
+  sendTransaction(tx: {
+    to: `0x${string}`;
+    data: `0x${string}`;
+    value: bigint;
+    gas: bigint;
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+    nonce?: number;
+  }): Promise<`0x${string}`>;
+
+  getAddress(): Promise<`0x${string}`> | `0x${string}`;
+}
+```
+
+`sendTransaction` receives a fully prepared transaction object. Sign it, broadcast it, and return the transaction hash. `getAddress` can be sync or async depending on your wallet provider.
+
+**Example: wrapping ethers.js**
+
+```typescript
+import { Wallet } from 'ethers';
+import { MandateWallet, type ExternalSigner } from '@mandate/sdk';
+
+class EthersSigner implements ExternalSigner {
+  constructor(private wallet: Wallet) {}
+
+  async sendTransaction(tx: Parameters<ExternalSigner['sendTransaction']>[0]) {
+    const response = await this.wallet.sendTransaction({
+      to: tx.to,
+      data: tx.data,
+      value: tx.value,
+      gasLimit: tx.gas,
+      maxFeePerGas: tx.maxFeePerGas,
+      maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
+      nonce: tx.nonce,
+    });
+    return response.hash as `0x${string}`;
+  }
+
+  getAddress() {
+    return this.wallet.address as `0x${string}`;
+  }
+}
+
+const mandateWallet = new MandateWallet({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+  signer: new EthersSigner(ethersWallet),
+  chainId: 84532,
+});
+```
+
+## Error handling
+
+All `MandateWallet` methods throw typed errors on failure. Catch them to build resilient agent logic.
+
+```typescript
+import {
+  PolicyBlockedError,
+  ApprovalRequiredError,
+  CircuitBreakerError,
+} from '@mandate/sdk';
+
+try {
+  await wallet.transfer(to, amount, token, { reason });
+} catch (err) {
+  if (err instanceof PolicyBlockedError) {
+    console.log('Policy violation:', err.blockReason);
+  } else if (err instanceof CircuitBreakerError) {
+    console.log('Agent is emergency-stopped');
+  } else if (err instanceof ApprovalRequiredError) {
+    console.log('Needs human approval:', err.approvalId);
+  }
+}
+```
+
+Use the `WithApproval` method variants if you want the SDK to handle `ApprovalRequiredError` automatically instead of catching it yourself.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MandateClient" icon="code" href="/sdk/mandate-client">
+    Low-level API methods for validate, register, and status polling.
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/sdk/errors">
+    Typed error classes, catch patterns, and recovery strategies.
+  </Card>
+  <Card title="Handle Approvals" icon="clock" href="/guides/handle-approvals">
+    Build approval workflows with polling and callbacks.
+  </Card>
+  <Card title="x402 Payments" icon="credit-card" href="/guides/x402-payments">
+    Pay-per-request with the x402 protocol.
+  </Card>
+</CardGroup>

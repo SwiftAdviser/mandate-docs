@@ -1,0 +1,125 @@
+---
+title: "Error Codes"
+sidebarTitle: "Error Codes"
+description: "HTTP status codes, error response format, and SDK error class mapping for the Mandate API."
+---
+
+## Error response format
+
+Every error response from the Mandate API returns JSON with a consistent structure. The exact fields depend on whether the error is a policy block or a general API error.
+
+### Policy block response
+
+```json
+{
+  "allowed": false,
+  "blockReason": "per_tx_limit_exceeded",
+  "blockDetail": "$500.00 exceeds $100/tx limit",
+  "declineMessage": "This transaction exceeds your per-transaction limit of $100."
+}
+```
+
+### General error response
+
+```json
+{
+  "error": "Invalid or missing runtime key"
+}
+```
+
+The `blockReason` field is only present on policy blocks (422) and circuit breaker blocks (403). The `declineMessage` field is an adversarial counter-message designed to override prompt injection attempts.
+
+## HTTP status code reference
+
+| Status | Meaning | SDK Error Class | When It Happens |
+|--------|---------|-----------------|-----------------|
+| `200` | Success | None | Transaction validated successfully, event posted, or status retrieved |
+| `202` | Approval required | `ApprovalRequiredError` | Transaction passes policy but requires human approval |
+| `400` | Bad request | `MandateError` | Missing required fields, invalid JSON, or malformed parameters |
+| `401` | Unauthorized | `MandateError` | Missing `Authorization` header, invalid runtime key, or expired key |
+| `403` | Circuit breaker active | `CircuitBreakerError` | Agent's circuit breaker is tripped. All transactions blocked. |
+| `404` | Not found | `MandateError` | Intent ID does not exist or belongs to a different agent |
+| `409` | Conflict | `MandateError` | Duplicate intent hash or attempt to transition an intent in a wrong state |
+| `410` | Gone | `MandateError` | Approval expired. The 1-hour TTL has elapsed. |
+| `422` | Policy blocked | `PolicyBlockedError` or `RiskBlockedError` | Transaction violates a policy rule or is flagged by risk scanning |
+| `429` | Rate limited | `MandateError` | Too many requests. Back off and retry. |
+| `500` | Server error | `MandateError` | Transient server issue. Safe to retry with exponential backoff. |
+
+## SDK error class hierarchy
+
+```
+MandateError (base)
+  statusCode: number
+  blockReason?: string
+
+├── PolicyBlockedError (422)
+│     detail?: string
+│     declineMessage?: string
+
+├── CircuitBreakerError (403)
+│     blockReason: "circuit_breaker_active"
+
+├── ApprovalRequiredError (202)
+│     intentId: string
+│     approvalId: string
+│     approvalReason?: string
+
+└── RiskBlockedError (422)
+      blockReason: "aegis_critical_risk"
+```
+
+## Mapping responses to error classes
+
+The SDK automatically maps API responses to the correct error class:
+
+- **403 with `circuit_breaker_active`** maps to `CircuitBreakerError`
+- **422 with `aegis_critical_risk`** maps to `RiskBlockedError`
+- **422 with any other `blockReason`** maps to `PolicyBlockedError`
+- **202 with `requiresApproval: true`** maps to `ApprovalRequiredError`
+- **All other non-2xx responses** map to `MandateError`
+
+## Handling errors
+
+Always check specific subclasses before the base class:
+
+```typescript
+import {
+  CircuitBreakerError,
+  RiskBlockedError,
+  ApprovalRequiredError,
+  PolicyBlockedError,
+  MandateError,
+} from '@mandate.md/sdk';
+
+try {
+  await client.validate(payload);
+} catch (err) {
+  if (err instanceof CircuitBreakerError) {
+    // 403: halt all operations
+  } else if (err instanceof RiskBlockedError) {
+    // 422: dangerous address, do not retry
+  } else if (err instanceof ApprovalRequiredError) {
+    // 202: poll for approval
+    await client.waitForApproval(err.intentId);
+  } else if (err instanceof PolicyBlockedError) {
+    // 422: show decline message
+    console.log(err.declineMessage);
+  } else if (err instanceof MandateError) {
+    // Generic: check statusCode for retry logic
+    if (err.statusCode >= 500) {
+      // Safe to retry with backoff
+    }
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SDK Error Classes" icon="code" href="/sdk/errors">
+    Detailed reference for each error class with properties and recovery patterns.
+  </Card>
+  <Card title="Block Reasons" icon="circle-xmark" href="/reference/block-reasons">
+    All blockReason values with causes and resolutions.
+  </Card>
+</CardGroup>

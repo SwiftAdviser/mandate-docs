@@ -1,0 +1,50 @@
+---
+title: "mandate activate"
+sidebarTitle: "activate"
+description: "Set the EVM wallet address for a registered agent. Required before validating transactions."
+---
+
+## What does activate do?
+
+The `activate` command sets the wallet address for an agent that was registered without one. You need a wallet address before the policy engine can validate transactions.
+
+```bash
+npx @mandate.md/cli activate 0xYourWalletAddress
+```
+
+## When to use it
+
+If you ran `login` without `--address`, the agent has a zero address and cannot validate transactions. Call `activate` with the wallet address your agent will use to sign transactions.
+
+## Example
+
+```bash
+npx @mandate.md/cli activate 0x1234567890abcdef1234567890abcdef12345678
+```
+
+## Output
+
+```json
+{
+  "activated": true,
+  "evmAddress": "0x1234567890abcdef1234567890abcdef12345678",
+  "onboardingUrl": "https://app.mandate.md/onboarding/..."
+}
+```
+
+The command updates `~/.mandate/credentials.json` with the new address. All subsequent commands use this address automatically.
+
+<Note>
+This command requires authentication. You must run `login` first to store a valid runtime key.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Validate a Transaction" icon="arrow-right" href="/cli/validate">
+    Run your first policy check with the activated wallet.
+  </Card>
+  <Card title="Check Agent Info" icon="arrow-right" href="/cli/whoami">
+    Verify your credentials and wallet address.
+  </Card>
+</CardGroup>

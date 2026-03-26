@@ -1,0 +1,58 @@
+---
+title: "Vercel AI SDK"
+sidebarTitle: "Vercel AI"
+description: "Use Mandate with the Vercel AI SDK to enforce spending policies on AI-generated transactions."
+---
+
+<Info>
+  **Coming soon.** A dedicated Vercel AI SDK plugin with tool-level interception is in development. In the meantime, use the Mandate TypeScript SDK directly alongside the Vercel AI SDK.
+</Info>
+
+## Using Mandate with Vercel AI SDK today
+
+Mandate works with any AI framework through the TypeScript SDK. Call `MandateClient.validate()` before any tool that sends a transaction.
+
+```typescript
+import { MandateClient, PolicyBlockedError } from '@mandate.md/sdk';
+import { generateText } from 'ai';
+
+const mandateClient = new MandateClient({
+  runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
+});
+
+// Before executing any transaction tool:
+try {
+  const result = await mandateClient.validate({
+    action: 'transfer',
+    amount: '50',
+    to: '0xRecipientAddress',
+    token: 'USDC',
+    reason: 'AI-generated payment for data analysis',
+  });
+  console.log('Allowed. IntentId:', result.intentId);
+} catch (err) {
+  if (err instanceof PolicyBlockedError) {
+    console.log('Blocked:', err.blockReason);
+  }
+}
+```
+
+Add this validation check inside any tool definition that triggers on-chain actions. The `validate()` call takes less than 200ms and runs your transaction against all 14 policy checks.
+
+## What the dedicated plugin will add
+
+The planned Vercel AI plugin will intercept tool calls automatically, so you do not need to add manual `validate()` calls. It will wrap your tool definitions and enforce Mandate policies at the framework level before execution.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SDK Overview" icon="code" href="/sdk/overview">
+    Install and configure the Mandate TypeScript SDK.
+  </Card>
+  <Card title="Integrations Overview" icon="grid-2" href="/integrations/overview">
+    See all available framework integrations.
+  </Card>
+  <Card title="Handle Errors" icon="triangle-exclamation" href="/guides/handle-errors">
+    Catch policy blocks, approval requests, and circuit breaker errors.
+  </Card>
+</CardGroup>

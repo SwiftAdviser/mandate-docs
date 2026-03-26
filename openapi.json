@@ -1,0 +1,1677 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Mandate API",
+    "version": "1.2.0",
+    "description": "Non-custodial agent wallet policy layer. Enforces spend limits, allowlists, and approval workflows for AI agent transactions without ever receiving private keys.",
+    "contact": {
+      "name": "Mandate",
+      "url": "https://mandate.md",
+      "email": "support@mandate.md"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://app.mandate.md",
+      "description": "Production"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Registration",
+      "description": "Agent registration and claiming. No auth required for register; Sanctum auth for claim."
+    },
+    {
+      "name": "Agent API",
+      "description": "Endpoints authenticated with a runtime key (Bearer mndt_live_... or mndt_test_...). Used by agents to validate transactions, post events, and poll status."
+    },
+    {
+      "name": "Intent Lifecycle",
+      "description": "Post transaction hashes after broadcast and poll intent status until confirmed."
+    },
+    {
+      "name": "Dashboard",
+      "description": "Dashboard endpoints for human operators. Authenticated via Sanctum (cookie-based session)."
+    },
+    {
+      "name": "Policies",
+      "description": "Policy management for agents. List, create, and view policy configurations."
+    },
+    {
+      "name": "Approvals",
+      "description": "Approval queue for transactions that require human review."
+    }
+  ],
+  "security": [],
+  "paths": {
+    "/api/agents/register": {
+      "post": {
+        "operationId": "registerAgent",
+        "summary": "Register a new agent",
+        "description": "Creates a new agent identity with a runtime key and claim URL. No authentication required. The agent receives a `runtimeKey` for API calls and a `claimUrl` the human owner visits to link the agent to their dashboard.",
+        "tags": ["Registration"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              },
+              "example": {
+                "name": "Treasury Bot",
+                "evmAddress": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
+                "chainId": 84532,
+                "defaultPolicy": {
+                  "spendLimitPerTxUsd": 100,
+                  "spendLimitPerDayUsd": 1000
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Agent registered successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                },
+                "example": {
+                  "agentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "runtimeKey": "mndt_test_abc123def456ghi789jkl012mno345",
+                  "claimUrl": "https://app.mandate.md/claim?code=A1B2C3D4",
+                  "walletAddress": "0x71c7656ec7ab88b098defb751b7401b5f6d8976f",
+                  "evmAddress": "0x71c7656ec7ab88b098defb751b7401b5f6d8976f",
+                  "chainId": "84532",
+                  "defaultPolicy": {
+                    "spendLimitPerTxUsd": 100,
+                    "spendLimitPerDayUsd": 1000
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/activate": {
+      "post": {
+        "operationId": "activateAgent",
+        "summary": "Set wallet address",
+        "description": "Sets the EVM wallet address for the agent. Call once after registration if the address was not provided at registration time, or to update it.",
+        "tags": ["Agent API"],
+        "security": [{ "RuntimeKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivateRequest"
+              },
+              "example": {
+                "evmAddress": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent activated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivateResponse"
+                },
+                "example": {
+                  "activated": true,
+                  "agentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "evmAddress": "0x71c7656ec7ab88b098defb751b7401b5f6d8976f",
+                  "onboardingUrl": "https://app.mandate.md/dashboard?onboarding=1",
+                  "message": "Agent activated. Tell your human to visit: https://app.mandate.md/dashboard?onboarding=1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing runtime key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid address format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/validate": {
+      "post": {
+        "operationId": "validateTransaction",
+        "summary": "Validate a transaction (action-based)",
+        "description": "Primary validation endpoint. Checks circuit breaker, schedule, allowlist, blocked actions, spend limits, daily/monthly quotas, address risk, reason scanner, and approval gates. Works with any wallet type (custodial or self-custodial). No intentHash, nonce, or gas params needed.\n\nAlso available at `/api/validate/preflight` (alias).",
+        "tags": ["Agent API"],
+        "security": [{ "RuntimeKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              },
+              "example": {
+                "action": "transfer",
+                "amount": "50",
+                "to": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
+                "token": "USDC",
+                "reason": "Invoice #127 from Alice for March design work"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction allowed. Proceed with your wallet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateAllowedResponse"
+                },
+                "example": {
+                  "allowed": true,
+                  "intentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "action": "transfer",
+                  "chain": "84532",
+                  "requiresApproval": false
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Transaction requires human approval. Poll intent status until approved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateApprovalResponse"
+                },
+                "example": {
+                  "allowed": false,
+                  "intentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "action": "transfer",
+                  "requiresApproval": true,
+                  "approvalId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                  "approvalReason": "Amount exceeds $100 approval threshold",
+                  "instruction": "Transaction requires human approval. The wallet owner has been notified. Poll GET /api/intents/9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b/status to check approval status."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing runtime key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Circuit breaker is active. All transactions blocked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateBlockedResponse"
+                },
+                "example": {
+                  "allowed": false,
+                  "blockReason": "circuit_breaker_active",
+                  "blockDetail": "Circuit breaker was tripped due to envelope mismatch",
+                  "declineMessage": null,
+                  "action": "transfer"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Transaction blocked by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateBlockedResponse"
+                },
+                "example": {
+                  "allowed": false,
+                  "blockReason": "per_tx_limit_exceeded",
+                  "blockDetail": "$500.00 exceeds per-transaction limit of $100.00",
+                  "declineMessage": "This transaction exceeds your configured spend limit. Adjust the policy in your dashboard if this is intentional.",
+                  "action": "transfer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/validate/raw": {
+      "post": {
+        "operationId": "validateRawTransaction",
+        "summary": "Validate a raw EVM transaction (deprecated)",
+        "description": "Legacy raw EVM validation endpoint. Requires full transaction parameters and an intentHash. Use `/api/validate` for all new integrations.\n\nThe intentHash must match: `keccak256(\"<chainId>|<nonce>|<to_lower>|<calldata_lower>|<valueWei>|<gasLimit>|<maxFeePerGas>|<maxPriorityFeePerGas>|<txType>|<accessList_json>\")`",
+        "tags": ["Agent API"],
+        "security": [{ "RuntimeKeyAuth": [] }],
+        "deprecated": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RawValidateRequest"
+              },
+              "example": {
+                "chainId": 84532,
+                "nonce": 42,
+                "to": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                "calldata": "0xa9059cbb00000000000000000000000071c7656ec7ab88b098defb751b7401b5f6d8976f0000000000000000000000000000000000000000000000000000000000989680",
+                "valueWei": "0",
+                "gasLimit": "90000",
+                "maxFeePerGas": "1000000000",
+                "maxPriorityFeePerGas": "1000000000",
+                "txType": 2,
+                "accessList": [],
+                "intentHash": "0xabc123def456789012345678901234567890123456789012345678901234abcd",
+                "reason": "Invoice #127 from Alice for March design work"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction validated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RawValidateResponse"
+                },
+                "example": {
+                  "allowed": true,
+                  "intentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "chain": "84532",
+                  "requiresApproval": false,
+                  "approvalId": null,
+                  "approvalReason": null,
+                  "blockReason": null,
+                  "riskLevel": "SAFE",
+                  "riskDegraded": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing runtime key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Transaction blocked by policy or invalid intentHash.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RawValidateBlockedResponse"
+                },
+                "example": {
+                  "allowed": false,
+                  "blockReason": "intent_hash_mismatch",
+                  "blockDetail": "Client intentHash does not match server recomputation",
+                  "declineMessage": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/intents/{intentId}/events": {
+      "post": {
+        "operationId": "postIntentEvent",
+        "summary": "Post transaction hash after broadcast",
+        "description": "After broadcasting a signed transaction on-chain, post the txHash back to Mandate. This transitions the intent to `broadcasted` and triggers asynchronous envelope verification (for raw-validated intents).",
+        "tags": ["Intent Lifecycle"],
+        "security": [{ "RuntimeKeyAuth": [] }],
+        "parameters": [
+          {
+            "name": "intentId",
+            "in": "path",
+            "required": true,
+            "description": "The intent ID returned from validation.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostEventRequest"
+              },
+              "example": {
+                "txHash": "0x9f2e4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event recorded, intent transitioned to broadcasted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostEventResponse"
+                },
+                "example": {
+                  "intentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "status": "broadcasted",
+                  "txHash": "0x9f2e4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing runtime key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Intent not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Intent not found."
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Intent is in terminal state or wrong status for posting events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictResponse"
+                },
+                "example": {
+                  "error": "Intent must be in reserved or approved state to post a txHash.",
+                  "status": "confirmed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/intents/{intentId}/status": {
+      "get": {
+        "operationId": "getIntentStatus",
+        "summary": "Get intent status",
+        "description": "Poll the current status of an intent. Use this to wait for approval decisions or on-chain confirmation.",
+        "tags": ["Intent Lifecycle"],
+        "security": [{ "RuntimeKeyAuth": [] }],
+        "parameters": [
+          {
+            "name": "intentId",
+            "in": "path",
+            "required": true,
+            "description": "The intent ID returned from validation.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Intent status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntentStatus"
+                },
+                "example": {
+                  "intentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "status": "confirmed",
+                  "txHash": "0x9f2e4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f",
+                  "blockNumber": "12345678",
+                  "gasUsed": "65000",
+                  "amountUsd": "50.00",
+                  "decodedAction": "transfer(0x71c7...976f, 50000000)",
+                  "summary": "Transferred 50 USDC to 0x71c7...976f",
+                  "blockReason": null,
+                  "requiresApproval": false,
+                  "approvalId": null,
+                  "expiresAt": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing runtime key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Intent not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Intent not found."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/risk/check": {
+      "post": {
+        "operationId": "checkRisk",
+        "summary": "Check address risk",
+        "description": "Run a risk assessment against a target address using the Aegis security scanner. Returns a risk level and warnings.",
+        "tags": ["Agent API"],
+        "security": [{ "RuntimeKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RiskCheckRequest"
+              },
+              "example": {
+                "to": "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
+                "chainId": 84532,
+                "calldata": "0x",
+                "value": "0"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Risk assessment result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskCheckResponse"
+                },
+                "example": {
+                  "risk_level": "SAFE",
+                  "degraded": false,
+                  "warnings": [],
+                  "toxic_score": 0,
+                  "simulation": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing runtime key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/claim": {
+      "post": {
+        "operationId": "claimAgent",
+        "summary": "Claim an agent",
+        "description": "Links an unclaimed agent to the authenticated user's dashboard account using the claim code from the agent's `claimUrl`.",
+        "tags": ["Dashboard"],
+        "security": [{ "SanctumAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRequest"
+              },
+              "example": {
+                "claimCode": "A1B2C3D4"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent claimed successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResponse"
+                },
+                "example": {
+                  "agentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "claimed": true,
+                  "claimedAt": "2026-03-26T12:00:00.000000Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invalid or already used claim code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid or already used claim code."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/create": {
+      "post": {
+        "operationId": "createAgent",
+        "summary": "Create an agent from dashboard",
+        "description": "Creates a new agent directly from the dashboard. The agent is automatically claimed by the authenticated user. Returns a runtime key.",
+        "tags": ["Dashboard"],
+        "security": [{ "SanctumAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAgentRequest"
+              },
+              "example": {
+                "name": "Treasury Bot"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Agent created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateAgentResponse"
+                },
+                "example": {
+                  "agentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "runtimeKey": "mndt_test_abc123def456ghi789jkl012mno345"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agentId}": {
+      "put": {
+        "operationId": "updateAgent",
+        "summary": "Update agent name",
+        "description": "Updates the agent's display name.",
+        "tags": ["Dashboard"],
+        "security": [{ "SanctumAuth": [] }],
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAgentRequest"
+              },
+              "example": {
+                "name": "Updated Bot Name"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateAgentResponse"
+                },
+                "example": {
+                  "updated": true,
+                  "name": "Updated Bot Name"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteAgent",
+        "summary": "Delete an agent",
+        "description": "Permanently deletes the agent and all associated data.",
+        "tags": ["Dashboard"],
+        "security": [{ "SanctumAuth": [] }],
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agentId}/regenerate-key": {
+      "post": {
+        "operationId": "regenerateKey",
+        "summary": "Regenerate runtime key",
+        "description": "Revokes all existing runtime keys for the agent and generates a new one. The old key stops working immediately.",
+        "tags": ["Dashboard"],
+        "security": [{ "SanctumAuth": [] }],
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "New runtime key generated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runtimeKey": {
+                      "type": "string",
+                      "description": "The new runtime key. Store securely; this is the only time it is returned.",
+                      "example": "mndt_test_new_key_abc123def456ghi789"
+                    }
+                  },
+                  "required": ["runtimeKey"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not the owner of this agent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agentId}/policies": {
+      "get": {
+        "operationId": "listPolicies",
+        "summary": "List agent policies",
+        "description": "Returns all policies for the agent, ordered by creation date (newest first). The active policy has `is_active: true`.",
+        "tags": ["Policies"],
+        "security": [{ "SanctumAuth": [] }],
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of policies.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "policies": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Policy" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPolicy",
+        "summary": "Create a new policy",
+        "description": "Creates a new active policy for the agent. The previous active policy is automatically deactivated. Fields not provided are carried forward from the previous policy.",
+        "tags": ["Policies"],
+        "security": [{ "SanctumAuth": [] }],
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePolicyRequest"
+              },
+              "example": {
+                "spendLimitPerTxUsd": 200,
+                "spendLimitPerDayUsd": 2000,
+                "spendLimitPerMonthUsd": 10000,
+                "allowedAddresses": ["0x71C7656EC7ab88b098defB751B7401B5f6d8976F"],
+                "requireApprovalAboveUsd": 500,
+                "blockedActions": ["bridge"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Policy created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agentId}/circuit-break": {
+      "post": {
+        "operationId": "toggleCircuitBreaker",
+        "summary": "Toggle circuit breaker",
+        "description": "Toggles the circuit breaker for the agent. When active, all transactions are blocked with `circuit_breaker_active`.",
+        "tags": ["Dashboard"],
+        "security": [{ "SanctumAuth": [] }],
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Circuit breaker toggled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CircuitBreakerToggleResponse"
+                },
+                "example": {
+                  "agentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "circuitBreakerActive": true,
+                  "reason": "Manually activated by operator"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getCircuitBreakerStatus",
+        "summary": "Get circuit breaker status",
+        "description": "Returns the current circuit breaker state for the agent.",
+        "tags": ["Dashboard"],
+        "security": [{ "SanctumAuth": [] }],
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Circuit breaker status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CircuitBreakerStatusResponse"
+                },
+                "example": {
+                  "agentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "circuitBreakerActive": false,
+                  "trippedAt": null,
+                  "reason": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/approvals": {
+      "get": {
+        "operationId": "listApprovals",
+        "summary": "List pending approvals",
+        "description": "Returns paginated list of pending approval requests for all agents owned by the authenticated user. Only non-expired pending approvals are returned.",
+        "tags": ["Approvals"],
+        "security": [{ "SanctumAuth": [] }],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page number (20 items per page).",
+            "schema": { "type": "integer", "default": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of pending approvals.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedApprovals"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/decide": {
+      "post": {
+        "operationId": "decideApproval",
+        "summary": "Approve or reject a pending approval",
+        "description": "Makes a decision on a pending approval request. Transitions the associated intent to `approved` or `rejected`.",
+        "tags": ["Approvals"],
+        "security": [{ "SanctumAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The approval ID.",
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideApprovalRequest"
+              },
+              "example": {
+                "decision": "approved",
+                "note": "Verified with vendor, payment is correct."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decision recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecideApprovalResponse"
+                },
+                "example": {
+                  "approvalId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                  "intentId": "9e5f1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+                  "decision": "approved",
+                  "intentStatus": "approved"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Approval already decided.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Approval already decided."
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Approval request has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Approval request has expired."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "RuntimeKeyAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Runtime key issued at agent registration. Prefixed with `mndt_live_` (mainnet) or `mndt_test_` (testnet). Pass as `Authorization: Bearer mndt_test_...`."
+      },
+      "SanctumAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "laravel_session",
+        "description": "Laravel Sanctum cookie-based session authentication. Obtained via GitHub OAuth login on the dashboard."
+      }
+    },
+    "schemas": {
+      "RegisterRequest": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Display name for the agent."
+          },
+          "walletAddress": {
+            "type": "string",
+            "description": "Wallet address (EVM 0x... or other chain format). Required if evmAddress not provided."
+          },
+          "evmAddress": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "EVM wallet address. Required if walletAddress not provided."
+          },
+          "chainId": {
+            "type": ["integer", "string"],
+            "description": "Chain ID (e.g. 84532 for Base Sepolia, 8453 for Base)."
+          },
+          "defaultPolicy": {
+            "type": "object",
+            "description": "Optional default policy overrides.",
+            "properties": {
+              "spendLimitPerTxUsd": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Per-transaction USD limit. Default: 100."
+              },
+              "spendLimitPerDayUsd": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Daily USD limit. Default: 1000."
+              }
+            }
+          }
+        }
+      },
+      "RegisterResponse": {
+        "type": "object",
+        "required": ["agentId", "runtimeKey", "claimUrl"],
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique agent identifier."
+          },
+          "runtimeKey": {
+            "type": "string",
+            "description": "Runtime key for API authentication. Store securely. This is the only time it is returned in full."
+          },
+          "claimUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL the human owner visits to link the agent to their dashboard."
+          },
+          "walletAddress": {
+            "type": "string",
+            "description": "Normalized wallet address."
+          },
+          "evmAddress": {
+            "type": "string",
+            "description": "Normalized EVM address (lowercase). Same as walletAddress for EVM agents."
+          },
+          "chainId": {
+            "type": ["string", "null"],
+            "description": "Chain ID, if provided."
+          },
+          "defaultPolicy": {
+            "type": "object",
+            "properties": {
+              "spendLimitPerTxUsd": { "type": "number" },
+              "spendLimitPerDayUsd": { "type": "number" }
+            }
+          }
+        }
+      },
+      "ActivateRequest": {
+        "type": "object",
+        "required": ["evmAddress"],
+        "properties": {
+          "evmAddress": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "EVM wallet address to set for this agent."
+          }
+        }
+      },
+      "ActivateResponse": {
+        "type": "object",
+        "required": ["activated", "agentId", "evmAddress", "onboardingUrl"],
+        "properties": {
+          "activated": { "type": "boolean", "enum": [true] },
+          "agentId": { "type": "string", "format": "uuid" },
+          "evmAddress": { "type": "string", "description": "Normalized lowercase EVM address." },
+          "onboardingUrl": { "type": "string", "format": "uri", "description": "Dashboard URL with onboarding flag." },
+          "message": { "type": "string", "description": "Human-readable activation message." }
+        }
+      },
+      "ValidateRequest": {
+        "type": "object",
+        "required": ["action", "reason"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "What the agent is doing: \"transfer\", \"swap\", \"buy\", \"bridge\", \"stake\", \"bet\", etc. Free text."
+          },
+          "amount": {
+            "type": "string",
+            "description": "USD value of the transaction (assumes stablecoins). Checked against spend limits."
+          },
+          "to": {
+            "type": "string",
+            "description": "Recipient address. Checked against allowlist if configured."
+          },
+          "token": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "Token symbol or address (e.g. \"USDC\", \"ETH\")."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Why the agent is making this transaction. Scanned for prompt injection. Logged in audit trail. Shown to owner on approval requests."
+          },
+          "chain": {
+            "type": "string",
+            "maxLength": 32,
+            "description": "Chain identifier (e.g. \"base\", \"ethereum\", \"84532\")."
+          }
+        }
+      },
+      "ValidateAllowedResponse": {
+        "type": "object",
+        "required": ["allowed", "intentId", "action", "requiresApproval"],
+        "properties": {
+          "allowed": { "type": "boolean", "enum": [true] },
+          "intentId": { "type": "string", "format": "uuid", "description": "Unique intent identifier for this validation." },
+          "action": { "type": "string", "description": "Echoed action field." },
+          "chain": { "type": ["string", "null"], "description": "Chain ID or identifier." },
+          "requiresApproval": { "type": "boolean", "enum": [false] }
+        }
+      },
+      "ValidateApprovalResponse": {
+        "type": "object",
+        "required": ["allowed", "intentId", "action", "requiresApproval", "approvalId"],
+        "properties": {
+          "allowed": { "type": "boolean", "enum": [false] },
+          "intentId": { "type": "string", "format": "uuid" },
+          "action": { "type": "string" },
+          "requiresApproval": { "type": "boolean", "enum": [true] },
+          "approvalId": { "type": "string", "format": "uuid", "description": "Approval queue entry ID." },
+          "approvalReason": { "type": ["string", "null"], "description": "Why approval is required." },
+          "instruction": { "type": "string", "description": "Human-readable instruction for the agent to follow." }
+        }
+      },
+      "ValidateBlockedResponse": {
+        "type": "object",
+        "required": ["allowed", "blockReason"],
+        "properties": {
+          "allowed": { "type": "boolean", "enum": [false] },
+          "blockReason": {
+            "type": "string",
+            "description": "Machine-readable block reason.",
+            "enum": [
+              "circuit_breaker_active",
+              "no_active_policy",
+              "intent_hash_mismatch",
+              "gas_limit_exceeded",
+              "value_wei_exceeded",
+              "outside_schedule",
+              "address_not_allowed",
+              "selector_blocked",
+              "per_tx_limit_exceeded",
+              "daily_quota_exceeded",
+              "monthly_quota_exceeded",
+              "reason_blocked",
+              "aegis_critical_risk",
+              "action_blocked"
+            ]
+          },
+          "blockDetail": { "type": ["string", "null"], "description": "Human-readable explanation of the block." },
+          "declineMessage": { "type": ["string", "null"], "description": "Counter-message to override potential prompt injection." },
+          "action": { "type": "string", "description": "Echoed action field." }
+        }
+      },
+      "RawValidateRequest": {
+        "type": "object",
+        "required": ["chainId", "nonce", "to", "gasLimit", "maxFeePerGas", "maxPriorityFeePerGas", "intentHash", "reason"],
+        "properties": {
+          "chainId": { "type": "integer", "description": "EVM chain ID." },
+          "nonce": { "type": "integer", "minimum": 0, "description": "Transaction nonce." },
+          "to": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$", "description": "Target contract or recipient address." },
+          "calldata": { "type": "string", "description": "Hex-encoded calldata (0x-prefixed). Default: empty." },
+          "valueWei": { "type": "string", "description": "Native token value in wei. Default: \"0\"." },
+          "gasLimit": { "type": "string", "description": "Gas limit for the transaction." },
+          "maxFeePerGas": { "type": "string", "description": "EIP-1559 max fee per gas (wei)." },
+          "maxPriorityFeePerGas": { "type": "string", "description": "EIP-1559 max priority fee per gas (wei)." },
+          "txType": { "type": "integer", "description": "Transaction type (2 for EIP-1559). Default: 2." },
+          "accessList": { "type": "array", "description": "EIP-2930 access list. Default: []." },
+          "intentHash": { "type": "string", "pattern": "^0x[a-fA-F0-9]{64}$", "description": "keccak256 of the canonical transaction string. Must match server recomputation." },
+          "reason": { "type": "string", "maxLength": 1000, "description": "Why the agent is making this transaction." }
+        }
+      },
+      "RawValidateResponse": {
+        "type": "object",
+        "required": ["allowed", "intentId", "chain", "requiresApproval", "blockReason"],
+        "properties": {
+          "allowed": { "type": "boolean" },
+          "intentId": { "type": ["string", "null"], "format": "uuid" },
+          "chain": { "type": "string" },
+          "requiresApproval": { "type": "boolean" },
+          "approvalId": { "type": ["string", "null"], "format": "uuid" },
+          "approvalReason": { "type": ["string", "null"] },
+          "blockReason": { "type": ["string", "null"] },
+          "riskLevel": { "type": ["string", "null"], "enum": ["SAFE", "LOW", "MEDIUM", "HIGH", "CRITICAL", null] },
+          "riskDegraded": { "type": "boolean", "description": "True if risk service was unavailable and a degraded (safe) result was returned." }
+        }
+      },
+      "RawValidateBlockedResponse": {
+        "type": "object",
+        "required": ["allowed", "blockReason"],
+        "properties": {
+          "allowed": { "type": "boolean", "enum": [false] },
+          "blockReason": { "type": "string" },
+          "blockDetail": { "type": ["string", "null"] },
+          "declineMessage": { "type": ["string", "null"] }
+        }
+      },
+      "PostEventRequest": {
+        "type": "object",
+        "required": ["txHash"],
+        "properties": {
+          "txHash": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{64}$",
+            "description": "The on-chain transaction hash."
+          }
+        }
+      },
+      "PostEventResponse": {
+        "type": "object",
+        "required": ["intentId", "status", "txHash"],
+        "properties": {
+          "intentId": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["broadcasted"] },
+          "txHash": { "type": "string" }
+        }
+      },
+      "IntentStatus": {
+        "type": "object",
+        "required": ["intentId", "status"],
+        "properties": {
+          "intentId": { "type": "string", "format": "uuid" },
+          "status": {
+            "type": "string",
+            "enum": ["allowed", "reserved", "approval_pending", "approved", "rejected", "broadcasted", "confirmed", "failed", "expired"],
+            "description": "Current intent state."
+          },
+          "txHash": { "type": ["string", "null"], "description": "On-chain transaction hash, if broadcasted." },
+          "blockNumber": { "type": ["string", "null"], "description": "Block number where the transaction was confirmed." },
+          "gasUsed": { "type": ["string", "null"], "description": "Gas consumed by the transaction." },
+          "amountUsd": { "type": ["string", "null"], "description": "USD value of the transaction." },
+          "decodedAction": { "type": ["string", "null"], "description": "Decoded function call (e.g. \"transfer(0x71c7...976f, 50000000)\")." },
+          "summary": { "type": ["string", "null"], "description": "Human-readable summary of the transaction." },
+          "blockReason": { "type": ["string", "null"], "description": "Block reason if the intent failed due to policy." },
+          "requiresApproval": { "type": "boolean", "description": "True if the intent is currently awaiting human approval." },
+          "approvalId": { "type": ["string", "null"], "format": "uuid", "description": "Approval queue entry ID, if applicable." },
+          "expiresAt": { "type": ["string", "null"], "format": "date-time", "description": "When the intent expires if not acted upon." }
+        }
+      },
+      "RiskCheckRequest": {
+        "type": "object",
+        "required": ["to", "chainId"],
+        "properties": {
+          "to": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$", "description": "Target address to assess." },
+          "chainId": { "type": "integer", "description": "Chain ID for context." },
+          "calldata": { "type": "string", "description": "Hex-encoded calldata (optional)." },
+          "value": { "type": "string", "description": "Native token value in wei (optional)." },
+          "from": { "type": "string", "pattern": "^0x[a-fA-F0-9]{40}$", "description": "Sender address (optional)." }
+        }
+      },
+      "RiskCheckResponse": {
+        "type": "object",
+        "required": ["risk_level", "degraded", "warnings"],
+        "properties": {
+          "risk_level": {
+            "type": "string",
+            "enum": ["SAFE", "LOW", "MEDIUM", "HIGH", "CRITICAL"],
+            "description": "Assessed risk level."
+          },
+          "degraded": { "type": "boolean", "description": "True if the risk service was unavailable and a degraded result was returned." },
+          "warnings": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of warning messages from the risk assessment."
+          },
+          "toxic_score": { "type": ["integer", "null"], "description": "Numeric toxicity score from address screening." },
+          "simulation": { "description": "Transaction simulation result, if available.", "type": ["object", "null"] }
+        }
+      },
+      "ClaimRequest": {
+        "type": "object",
+        "required": ["claimCode"],
+        "properties": {
+          "claimCode": { "type": "string", "description": "8-character claim code from the agent's claimUrl." }
+        }
+      },
+      "ClaimResponse": {
+        "type": "object",
+        "required": ["agentId", "claimed"],
+        "properties": {
+          "agentId": { "type": "string", "format": "uuid" },
+          "claimed": { "type": "boolean", "enum": [true] },
+          "claimedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateAgentRequest": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 100, "description": "Display name for the agent." }
+        }
+      },
+      "CreateAgentResponse": {
+        "type": "object",
+        "required": ["agentId", "runtimeKey"],
+        "properties": {
+          "agentId": { "type": "string", "format": "uuid" },
+          "runtimeKey": { "type": "string", "description": "Runtime key. Store securely." }
+        }
+      },
+      "UpdateAgentRequest": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 100 }
+        }
+      },
+      "UpdateAgentResponse": {
+        "type": "object",
+        "required": ["updated", "name"],
+        "properties": {
+          "updated": { "type": "boolean", "enum": [true] },
+          "name": { "type": "string" }
+        }
+      },
+      "CreatePolicyRequest": {
+        "type": "object",
+        "properties": {
+          "spendLimitPerTxUsd": { "type": ["number", "null"], "minimum": 0, "description": "Max USD per transaction." },
+          "spendLimitPerDayUsd": { "type": ["number", "null"], "minimum": 0, "description": "Max USD per day." },
+          "spendLimitPerMonthUsd": { "type": ["number", "null"], "minimum": 0, "description": "Max USD per month." },
+          "allowedAddresses": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Allowlist of recipient addresses. If set, only these addresses are permitted." },
+          "allowedContracts": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Allowlist of contract addresses." },
+          "blockedSelectors": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Blocked EVM function selectors (e.g. \"0xa9059cbb\")." },
+          "blockedActions": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Blocked action types (e.g. [\"bridge\", \"bet\"])." },
+          "requireApprovalSelectors": { "type": ["array", "null"], "items": { "type": "string" }, "description": "EVM selectors that require human approval." },
+          "requireApprovalActions": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Action types that require human approval." },
+          "requireApprovalAboveUsd": { "type": ["number", "null"], "minimum": 0, "description": "USD threshold above which approval is required." },
+          "maxSlippageBps": { "type": ["integer", "null"], "minimum": 0, "description": "Max slippage in basis points." },
+          "maxGasLimit": { "type": ["string", "null"], "description": "Max gas limit per transaction." },
+          "maxValueWei": { "type": ["string", "null"], "description": "Max native token value in wei." },
+          "schedule": { "type": ["object", "null"], "description": "Time-based schedule restrictions (days/hours)." },
+          "guardRules": { "type": ["string", "null"], "maxLength": 10000, "description": "Custom guard rules in natural language (mandate.md format)." }
+        }
+      },
+      "Policy": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "agent_id": { "type": "string", "format": "uuid" },
+          "spend_limit_per_tx_usd": { "type": ["number", "null"] },
+          "spend_limit_per_day_usd": { "type": ["number", "null"] },
+          "spend_limit_per_month_usd": { "type": ["number", "null"] },
+          "allowed_addresses": { "type": ["array", "null"], "items": { "type": "string" } },
+          "allowed_contracts": { "type": ["array", "null"], "items": { "type": "string" } },
+          "blocked_selectors": { "type": ["array", "null"], "items": { "type": "string" } },
+          "blocked_actions": { "type": ["array", "null"], "items": { "type": "string" } },
+          "require_approval_selectors": { "type": ["array", "null"], "items": { "type": "string" } },
+          "require_approval_actions": { "type": ["array", "null"], "items": { "type": "string" } },
+          "require_approval_above_usd": { "type": ["number", "null"] },
+          "max_slippage_bps": { "type": ["integer", "null"] },
+          "max_gas_limit": { "type": ["string", "null"] },
+          "max_value_wei": { "type": ["string", "null"] },
+          "schedule": { "type": ["object", "null"] },
+          "guard_rules": { "type": ["string", "null"] },
+          "is_active": { "type": "boolean" },
+          "version": { "type": "integer" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CircuitBreakerToggleResponse": {
+        "type": "object",
+        "required": ["agentId", "circuitBreakerActive"],
+        "properties": {
+          "agentId": { "type": "string", "format": "uuid" },
+          "circuitBreakerActive": { "type": "boolean" },
+          "reason": { "type": ["string", "null"] }
+        }
+      },
+      "CircuitBreakerStatusResponse": {
+        "type": "object",
+        "required": ["agentId", "circuitBreakerActive"],
+        "properties": {
+          "agentId": { "type": "string", "format": "uuid" },
+          "circuitBreakerActive": { "type": "boolean" },
+          "trippedAt": { "type": ["string", "null"], "format": "date-time" },
+          "reason": { "type": ["string", "null"] }
+        }
+      },
+      "PaginatedApprovals": {
+        "type": "object",
+        "properties": {
+          "current_page": { "type": "integer" },
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ApprovalEntry" }
+          },
+          "last_page": { "type": "integer" },
+          "per_page": { "type": "integer", "example": 20 },
+          "total": { "type": "integer" }
+        }
+      },
+      "ApprovalEntry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "intent_id": { "type": "string", "format": "uuid" },
+          "agent_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "intent": { "$ref": "#/components/schemas/IntentSummary" },
+          "agent": { "$ref": "#/components/schemas/AgentSummary" }
+        }
+      },
+      "IntentSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string" },
+          "action": { "type": ["string", "null"] },
+          "reason": { "type": ["string", "null"] },
+          "amount_usd_computed": { "type": ["string", "null"] },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AgentSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "wallet_address": { "type": ["string", "null"] }
+        }
+      },
+      "DecideApprovalRequest": {
+        "type": "object",
+        "required": ["decision"],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": ["approved", "rejected"],
+            "description": "The approval decision."
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Optional note explaining the decision."
+          }
+        }
+      },
+      "DecideApprovalResponse": {
+        "type": "object",
+        "required": ["approvalId", "intentId", "decision", "intentStatus"],
+        "properties": {
+          "approvalId": { "type": "string", "format": "uuid" },
+          "intentId": { "type": "string", "format": "uuid" },
+          "decision": { "type": "string", "enum": ["approved", "rejected"] },
+          "intentStatus": { "type": "string", "enum": ["approved", "rejected"] }
+        }
+      },
+      "ConflictResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": { "type": "string" },
+          "status": { "type": "string", "description": "Current intent status." }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": { "type": "string", "description": "Human-readable error message." }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "required": ["message", "errors"],
+        "properties": {
+          "message": { "type": "string", "description": "Summary error message." },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "description": "Per-field validation errors."
+          }
+        }
+      }
+    }
+  }
+}

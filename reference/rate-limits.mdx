@@ -1,0 +1,81 @@
+---
+title: "Rate Limits"
+sidebarTitle: "Rate Limits"
+description: "Rate limiting behavior, response headers, and retry strategies for the Mandate API."
+---
+
+## How rate limiting works
+
+The Mandate API enforces per-agent rate limits to protect service stability. Limits are tracked per runtime key. When you exceed the limit, the API returns a `429 Too Many Requests` response with a `Retry-After` header.
+
+## Default limits
+
+| Endpoint Category | Rate Limit | Window |
+|-------------------|-----------|--------|
+| Validation (`/validate`, `/validate/raw`) | 60 requests | per minute |
+| Status polling (`/intents/{id}/status`) | 120 requests | per minute |
+| Event posting (`/intents/{id}/events`) | 30 requests | per minute |
+| Registration (`/agents/register`) | 10 requests | per minute |
+| Dashboard API | 120 requests | per minute |
+
+These limits apply per runtime key. Different agents with different keys have independent rate limits.
+
+## Response headers
+
+Every API response includes rate limit headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests allowed in the current window |
+| `X-RateLimit-Remaining` | Requests remaining in the current window |
+| `Retry-After` | Seconds to wait before retrying (only on 429 responses) |
+
+## 429 response format
+
+```json
+{
+  "error": "Too many requests. Retry after 12 seconds."
+}
+```
+
+The `Retry-After` header contains the number of seconds to wait.
+
+## Retry strategy
+
+Use exponential backoff when you receive a 429 response:
+
+```typescript
+async function validateWithRetry(client, payload, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await client.validate(payload);
+    } catch (err) {
+      if (err.statusCode === 429 && attempt < maxRetries - 1) {
+        const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+```
+
+<Warning>
+Do not poll `/intents/{id}/status` in a tight loop. The SDK's `waitForApproval()` and `waitForConfirmation()` methods use appropriate intervals (5s and 3s respectively) to stay within rate limits.
+</Warning>
+
+<Tip>
+If your agent needs higher limits for production workloads, contact the Mandate team. Custom rate limits are available for high-volume deployments.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Error Codes" icon="circle-exclamation" href="/reference/error-codes">
+    Full HTTP status code reference and error response format.
+  </Card>
+  <Card title="API Overview" icon="book" href="/api-reference/overview">
+    Base URL, authentication, and endpoint summary.
+  </Card>
+</CardGroup>

@@ -1,0 +1,55 @@
+---
+title: "Changelog"
+sidebarTitle: "Changelog"
+description: "Version history and release notes for Mandate API and SDK."
+---
+
+## v0.2.0
+
+_March 2026_
+
+**Action-based validation, codebase scanner, MCP server mode.**
+
+The primary validation endpoint has changed. `POST /api/validate` now accepts an `action` + `reason` payload instead of raw EVM transaction parameters. This makes Mandate wallet-agnostic: it works with custodial wallets (Bankr, Locus, Sponge), self-custodial signers, and any chain format.
+
+- **`POST /api/validate`** is the new primary endpoint. Send `action`, `reason`, and optionally `amount`, `to`, `token`, `chain`. No intentHash, nonce, or gas params needed.
+- **`POST /api/validate/preflight`** is an alias for `/validate` (backwards compatibility).
+- **`POST /api/validate/raw`** is now deprecated. It still works for existing EVM integrations that need intent hash verification and envelope verification, but all new integrations should use `/validate`.
+- **SDK**: `MandateClient.validate()` calls the new action-based endpoint. `MandateWallet` continues to use raw validation internally for self-custodial flows.
+- **CLI `scan` command**: `npx @mandate.md/cli scan` detects unprotected wallet calls in your codebase. Zero config, zero auth. Exit code 1 if findings exist (CI-friendly).
+- **MCP server mode**: `npx @mandate.md/cli --mcp` exposes all Mandate commands as MCP tools over stdio. Compatible with any MCP-capable host.
+- **`--llms` flag**: `npx @mandate.md/cli --llms` outputs a machine-readable command manifest for agent discovery.
+- **Risk scanning**: `POST /api/risk/check` endpoint for standalone address risk assessment via the Aegis security scanner.
+- **Blocked actions**: Policies now support `blockedActions` and `requireApprovalActions` fields for action-level control (e.g., block all "bridge" actions).
+- **Claude Code plugin**: `claude-mandate-plugin` replaces the legacy `@mandate/claude-code-hook`. Two-phase enforcement: PostToolUse records validation tokens, PreToolUse blocks unvalidated transactions. Fail-closed, no network calls in the gate.
+- **Prompt injection scanning**: The `reason` field is now scanned against 18 hardcoded patterns plus an optional LLM judge. Blocked transactions return a `declineMessage` counter-message.
+
+### Breaking changes
+
+- `MandateClient.preflight()` renamed to `MandateClient.validate()`. The old method name is removed.
+- `PreflightPayload` type renamed to `ValidatePayload` in the SDK. `PreflightResult` renamed to `ValidateResult`.
+- The `@mandate/guard` package has been removed. All checks are handled by the platform API.
+
+### Migration
+
+Replace `client.preflight({ action, reason })` with `client.validate({ action, reason })`. The request and response shapes are the same.
+
+---
+
+## v0.1.0
+
+_February 2026_
+
+**Initial release. Non-custodial agent wallet policy layer.**
+
+- **`MandateClient`**: Low-level API wrapper for registration, raw validation, intent events, and status polling.
+- **`MandateWallet`**: High-level wrapper that handles validate, sign, broadcast, and postEvent in a single `transfer()` call. Requires an `ExternalSigner` (your existing wallet).
+- **Registration**: `POST /api/agents/register` creates an agent identity, returns a `runtimeKey` and `claimUrl`. Human visits the claim URL to link the agent to their dashboard.
+- **Raw validation**: `POST /api/validate/raw` with full EVM tx params + `intentHash`. Policy engine checks circuit breaker, schedule, allowlist, selectors, spend limits, and quotas.
+- **Intent lifecycle**: `reserved`, `approval_pending`, `approved`, `broadcasted`, `confirmed`, `failed`, `expired`. Envelope verification checks that the on-chain transaction matches what was validated.
+- **Policy engine**: Per-transaction, daily, and monthly USD spend limits. Address allowlists. Function selector blocking. Schedule restrictions (days/hours). Approval gates for high-value transactions.
+- **Circuit breaker**: Auto-trips on envelope mismatch. Manual toggle via dashboard. When active, all agent transactions are blocked.
+- **Error types**: `PolicyBlockedError`, `CircuitBreakerError`, `ApprovalRequiredError`, `RiskBlockedError` with typed fields for `blockReason`, `detail`, and `declineMessage`.
+- **CLI**: `@mandate.md/cli` with commands for `login`, `activate`, `validate-raw`, `transfer`, `event`, `status`, `approve`.
+- **Dashboard**: Agent management, policy builder, approval queue, audit log, circuit breaker controls.
+- **Integrations**: OpenClaw plugin, GOAT SDK plugin, Coinbase AgentKit provider, ElizaOS plugin, GAME SDK plugin (Virtuals), MCP server (Cloudflare Workers).

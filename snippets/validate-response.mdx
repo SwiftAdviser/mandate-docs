@@ -1,0 +1,27 @@
+### Validation response
+
+A successful `validate()` call returns a `PreflightResult`:
+
+```typescript
+interface PreflightResult {
+  allowed: boolean;          // true if transaction can proceed
+  intentId: string | null;   // Unique intent ID for tracking
+  requiresApproval: boolean; // true if human approval is needed
+  approvalId: string | null; // Approval queue entry ID
+  approvalReason?: string;   // Why approval is required
+  blockReason: string | null;// null if allowed, otherwise the reason code
+  blockDetail?: string;      // Human-readable block explanation
+  action: string;            // Echo of the validated action
+}
+```
+
+| Outcome | `allowed` | `requiresApproval` | What happens |
+|---------|-----------|---------------------|--------------|
+| Approved | `true` | `false` | Proceed with the transaction |
+| Needs approval | `true` | `true` | SDK throws `ApprovalRequiredError`. Poll with `waitForApproval()`. |
+| Blocked | `false` | `false` | SDK throws `PolicyBlockedError` with `blockReason` |
+
+<Note>
+When `requiresApproval` is `true`, the SDK throws an `ApprovalRequiredError` automatically.
+You do not need to check this field manually. See [Handle Approvals](/guides/handle-approvals).
+</Note>

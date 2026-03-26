@@ -1,0 +1,59 @@
+---
+title: "Address Risk Scanning"
+sidebarTitle: "Risk Scanning"
+description: "How Mandate screens destination addresses against known-malicious databases using the Aegis service."
+---
+
+**Address risk scanning** is the process of checking a transaction's destination address against known-malicious databases before approving the transaction. Mandate uses the Aegis service (W3A integration) to screen every destination address in real time.
+
+## How does risk scanning work?
+
+When an agent submits a transaction for validation, the policy engine sends the destination address to the Aegis service. Aegis checks the address against multiple threat intelligence databases and returns a risk level. The policy engine uses this risk level to decide whether to allow, flag, or block the transaction.
+
+The check runs in parallel with other policy evaluations (spend limits, allowlists, schedules) to minimize latency. Results are cached per address for 10 minutes.
+
+## What are the risk levels?
+
+| Level | Action | blockReason |
+|-------|--------|-------------|
+| SAFE | Proceed normally | None |
+| MEDIUM | Proceed, flagged in audit log | None |
+| HIGH | Requires human approval | (approval trigger: `high_risk`) |
+| CRITICAL | Blocked immediately | `aegis_critical_risk` |
+
+MEDIUM-risk addresses are not blocked or paused, but the risk flag appears in the audit log. This creates a record for post-incident review without adding friction to legitimate transactions.
+
+## What does Aegis check?
+
+The Aegis service aggregates data from multiple sources to evaluate addresses:
+
+- **Sanctioned addresses.** Addresses on OFAC, EU, or other regulatory sanctions lists.
+- **Known scam contracts.** Contracts reported across scam databases and community reports.
+- **Phishing addresses.** Addresses associated with phishing campaigns targeting wallet users.
+- **Mixer contracts.** Addresses associated with mixing services used to obscure fund origins.
+
+The databases update continuously. An address that was SAFE yesterday can become CRITICAL today if it appears on a sanctions list.
+
+## What happens when the risk service is unavailable?
+
+If the Aegis service is temporarily unreachable (network issues, service downtime), the transaction proceeds with a `risk_degraded` flag in the audit log. The policy engine does not block transactions due to risk service downtime.
+
+This is a deliberate design choice. Blocking all transactions because a third-party service is down would make the risk scanner a denial-of-service vector. The degraded flag ensures you can audit which transactions were not scanned during the outage.
+
+## How do you enable or disable risk scanning?
+
+Risk scanning is controlled by the `risk_scan_enabled` field in the agent's policy. It is enabled by default. To disable it, set `risk_scan_enabled: false` in the policy builder or via the API.
+
+Disabling risk scanning removes the Aegis check entirely. Transactions to any address will proceed based on other policy rules alone. This is not recommended for production agents.
+
+<CardGroup cols={3}>
+  <Card title="Threat Model" icon="shield" href="/security/threat-model">
+    Full security overview
+  </Card>
+  <Card title="Block Reasons" icon="ban" href="/reference/block-reasons">
+    All possible block reasons explained
+  </Card>
+  <Card title="Policy Builder" icon="sliders" href="/dashboard/policy-builder">
+    Configure risk scanning in your policy
+  </Card>
+</CardGroup>

@@ -1,0 +1,9 @@
+<Warning>
+**Non-negotiable fail-safe rules.** Every Mandate integration must follow these:
+
+1. **Always validate before signing.** Never sign or broadcast a transaction without calling `validate()` first.
+2. **Block if API is unreachable.** If the Mandate API returns a network error or timeout, do NOT execute the transaction. Block and retry.
+3. **Never ignore errors.** If `validate()` throws, the transaction must not proceed. No fallback to unvalidated execution.
+4. **Display the block reason.** When a transaction is blocked, show the human-readable `declineMessage` or `blockReason` to the user or log.
+5. **Post events after broadcast.** For raw validation flows, always call `postEvent()` with the `txHash` after broadcasting. This enables envelope verification.
+</Warning>

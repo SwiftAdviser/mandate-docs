@@ -1,0 +1,60 @@
+---
+title: "Non-Custodial Model"
+sidebarTitle: "Non-Custodial"
+description: "How Mandate enforces transaction policies without ever holding, accessing, or storing agent private keys."
+---
+
+## What does non-custodial mean?
+
+Mandate never holds, accesses, or stores private keys. All transaction signing happens locally on the agent's machine. Mandate validates the intent (what the agent wants to do and why), not the execution (signing and broadcasting). The private key stays with the agent throughout the entire lifecycle of every transaction.
+
+This is not a theoretical claim. The Mandate API has no endpoint that accepts a private key. The `validate` endpoint receives action metadata, a reason string, and optionally a destination address and amount. The `validate/raw` endpoint receives unsigned transaction parameters and an intent hash. Neither endpoint requires or accepts key material.
+
+## How does Mandate compare to other models?
+
+| Aspect | Custodial Wallet | Session Key | Mandate |
+|--------|-----------------|-------------|---------|
+| Who holds the key? | Service provider | Delegated signer | Agent (local) |
+| What if service is compromised? | Funds at risk, direct theft possible | Limited risk within delegation scope | No key exposure, no fund access |
+| What does the service check? | N/A (provider controls funds) | Signature validity + spend limits | Intent + reason + 14 policy checks |
+| Can the service steal funds? | Yes | Limited (within delegated permissions) | No (no key access, ever) |
+| Detects prompt injection? | No | No | Yes (18 patterns + LLM judge) |
+| Audit trail includes "why"? | No | No | Yes (reason field on every transaction) |
+
+Custodial wallets give the service provider full control over funds. If the provider is compromised, the attacker has direct access to sign and broadcast transactions. Session keys limit the scope of delegation, but the delegated signer can still act within its permissions without explaining why. Mandate adds the intent layer: even within policy limits, the agent must state its reason, and that reason is scanned for manipulation.
+
+## What is the validation flow?
+
+The non-custodial flow has four steps. The agent builds the transaction, asks Mandate for permission, signs locally, and reports the result.
+
+1. **Validate**: Agent sends transaction details to `POST /api/validate`. Mandate evaluates 14 policy checks and returns `allowed`, `blocked`, or `approval_required`.
+2. **Sign locally**: If allowed, the agent signs the transaction with its own private key. Mandate is not involved in this step.
+3. **Broadcast**: The agent sends the signed transaction to the blockchain. Mandate is not involved in this step.
+4. **Post event**: The agent reports the transaction hash to `POST /api/intents/{id}/events`. Mandate fetches the on-chain transaction and verifies it matches what was validated.
+
+Step 4 is the envelope verification. If the on-chain transaction does not match the validated parameters (different recipient, different amount, different calldata), Mandate trips the agent's circuit breaker and marks the intent as failed. This catches attempts to validate one transaction but broadcast a different one.
+
+## Why does this matter for AI agents?
+
+AI agents are high-value attack targets. They hold private keys, execute transactions autonomously, and process untrusted inputs from users, tools, and web content. A compromised agent with a custodial wallet means total fund loss.
+
+With Mandate's non-custodial model, a compromise of the Mandate API does not give the attacker signing capability. The attacker could at most disable validation (which the agent detects as an unreachable API and halts per fail-safe rules) or return false `allowed` responses. Even false positives from a compromised API cannot produce signed transactions: the agent still signs locally, and the envelope verifier catches parameter mismatches after broadcast.
+
+The attack surface is fundamentally different. Mandate validates intent. The agent controls execution. Neither party has the other's capabilities.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Threat Model" icon="shield-virus" href="/security/threat-model">
+    Detailed analysis of attack vectors and how Mandate mitigates each one.
+  </Card>
+  <Card title="How It Works" icon="circle-play" href="/how-it-works">
+    End-to-end walkthrough of a validated transaction.
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    System architecture and backend service overview.
+  </Card>
+  <Card title="Intent Hash" icon="fingerprint" href="/concepts/intent-hash">
+    How the intent hash binds validation to execution.
+  </Card>
+</CardGroup>

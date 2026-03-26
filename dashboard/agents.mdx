@@ -1,0 +1,79 @@
+---
+title: "Agents Management"
+sidebarTitle: "Agents"
+description: "Create, claim, edit, and delete agents from the Mandate dashboard. Manage runtime keys and wallet addresses."
+---
+
+## What is an agent in Mandate?
+
+An agent represents an AI system that executes blockchain transactions under your control. Each agent has a unique runtime key (prefixed `mndt_live_` or `mndt_test_`), an optional wallet address, and a policy that governs what it can do. You manage all agents from the dashboard Agents page.
+
+## Create an agent
+
+Click **New Agent** from the Agents page. Provide a name and select the chain. Mandate creates the agent via `POST /api/agents/create` and returns a runtime key plus a claim code.
+
+The agent appears in your list immediately with status **unclaimed** until you or another team member links it.
+
+<Note>
+Store the runtime key securely. You can view the key prefix in the dashboard, but the full key is only shown once at creation time.
+</Note>
+
+## Claim an agent
+
+Agents registered programmatically (via `POST /api/agents/register`) generate a `claimUrl`. Share this URL with the human operator who should own the agent. Visiting the claim URL links the agent to their dashboard account.
+
+You can also claim an agent by entering its 8-character claim code directly on the dashboard Agents page.
+
+## Agent list display
+
+Each agent card shows:
+
+| Field | Description |
+|-------|-------------|
+| **Name** | Editable inline. Click to rename. |
+| **Chain badge** | Network the agent operates on (e.g., Base Sepolia, Ethereum). |
+| **Wallet address** | The on-chain address controlled by the agent. |
+| **Key prefix** | `mndt_test_...` or `mndt_live_...` indicating environment. |
+| **Created date** | When the agent was registered. |
+| **Status** | Active, unclaimed, or circuit breaker tripped. |
+
+## Edit agent name
+
+Click the agent name directly in the list to edit it inline. Press Enter or click away to save. The name is a label for your convenience and does not affect policy evaluation.
+
+## Regenerate runtime key
+
+If a runtime key is compromised or you need to rotate credentials:
+
+1. Open the agent detail view.
+2. Click **Regenerate Key**.
+3. Confirm in the dialog. The old key is revoked immediately.
+4. Copy the new key. It is displayed only once.
+
+<Warning>
+Regenerating a key revokes the previous key instantly. Any agent process using the old key receives 401 errors until you update it with the new key.
+</Warning>
+
+## Delete an agent
+
+Click the delete icon on the agent card and confirm. Deletion is irreversible. All associated intents remain in the audit log for compliance, but the agent can no longer submit new transactions.
+
+Deleting an agent also invalidates its runtime key and removes its policy configuration.
+
+## Test vs live keys
+
+Agents created with test keys (`mndt_test_`) operate on testnets only. Live keys (`mndt_live_`) operate on mainnets. You cannot mix environments: a test key rejected on mainnet, a live key rejected on testnet.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Policy Builder" icon="shield-check" href="/dashboard/policy-builder">
+    Configure spend limits and approval rules for your new agent.
+  </Card>
+  <Card title="Register Agent (Guide)" icon="book-open" href="/guides/register-agent">
+    Step-by-step guide to registering agents programmatically.
+  </Card>
+  <Card title="Credential Management" icon="key" href="/security/credential-management">
+    Best practices for storing and rotating runtime keys.
+  </Card>
+</CardGroup>
