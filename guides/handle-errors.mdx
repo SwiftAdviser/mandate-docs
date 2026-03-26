@@ -19,7 +19,7 @@ MandateError (base: any API error)
 └── RiskBlockedError     (422: risk scanner flagged)
 ```
 
-All classes are exported from `@mandate/sdk`. Import them in a single statement:
+All classes are exported from `@mandate.md/sdk`. Import them in a single statement:
 
 ```typescript
 import {
@@ -28,7 +28,7 @@ import {
   CircuitBreakerError,
   ApprovalRequiredError,
   RiskBlockedError,
-} from '@mandate/sdk';
+} from '@mandate.md/sdk';
 ```
 
 ## Catching errors with instanceof
@@ -44,7 +44,7 @@ import {
   ApprovalRequiredError,
   RiskBlockedError,
   MandateError,
-} from '@mandate/sdk';
+} from '@mandate.md/sdk';
 
 const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY! });
 
@@ -97,7 +97,7 @@ try {
 ```bash CLI
 # CLI exits with non-zero codes on errors:
 # Exit 1 = policy blocked, Exit 2 = circuit breaker, Exit 3 = approval required
-npx @mandate/cli validate --action transfer --amount 500 --to 0xRecipientAddress --token USDC --reason "Payment"
+npx @mandate.md/cli validate --action transfer --amount 500 --to 0xRecipientAddress --token USDC --reason "Payment"
 echo "Exit code: $?"
 ```
 

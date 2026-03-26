@@ -20,7 +20,7 @@ Use `MandateClient` when your agent delegates signing to a separate wallet servi
 ## Constructor
 
 ```typescript
-import { MandateClient } from '@mandate/sdk';
+import { MandateClient } from '@mandate.md/sdk';
 
 const client = new MandateClient({
   runtimeKey: 'mndt_test_abc123...',  // Required
@@ -83,7 +83,7 @@ interface RegisterResult {
 **Example:**
 
 ```typescript
-import { MandateClient } from '@mandate/sdk';
+import { MandateClient } from '@mandate.md/sdk';
 
 const result = await MandateClient.register({
   name: 'trading-agent',
@@ -162,7 +162,7 @@ import {
   CircuitBreakerError,
   ApprovalRequiredError,
   RiskBlockedError,
-} from '@mandate/sdk';
+} from '@mandate.md/sdk';
 
 const client = new MandateClient({
   runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
@@ -366,7 +366,7 @@ import {
   MandateClient,
   ApprovalRequiredError,
   MandateError,
-} from '@mandate/sdk';
+} from '@mandate.md/sdk';
 
 const client = new MandateClient({
   runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
@@ -460,7 +460,7 @@ Use `MandateClient` when another service handles signing. Use `MandateWallet` wh
 If you only need the client without the wallet (to avoid the `viem` dependency), use the sub-path export:
 
 ```typescript
-import { MandateClient } from '@mandate/sdk/client';
+import { MandateClient } from '@mandate.md/sdk/client';
 ```
 
 This import pulls in `MandateClient` and the error classes only. No `viem`, no signing utilities.

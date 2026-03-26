@@ -39,7 +39,7 @@ SDK-based integrations give you full control over when and how validation happen
 Call the Mandate REST API from any programming language. No SDK required. Send HTTP requests to `https://app.mandate.md/api/validate` with your runtime key and transaction details.
 
 - **[REST API](/api-reference/overview)**: Direct HTTP calls. Works with Python, Go, Rust, Java, or anything that speaks HTTP.
-- **[CLI](/cli/overview)**: `npx @mandate/cli` for shell scripts and automation. Also supports [MCP server mode](/cli/mcp-flag) for tool-based platforms.
+- **[CLI](/cli/overview)**: `npx @mandate.md/cli` for shell scripts and automation. Also supports [MCP server mode](/cli/mcp-flag) for tool-based platforms.
 - **[MCP Server](/integrations/mcp-server)**: Cloudflare Workers deployment that exposes search and execute tools over the MCP protocol.
 
 API-direct is the most flexible option. You handle authentication, error handling, and retry logic yourself.
@@ -50,8 +50,8 @@ API-direct is the most flexible option. You handle authentication, error handlin
 |---|---|---|---|---|
 | [Claude Code Plugin](/integrations/claude-code) | Hook | `claude plugin install` | Any (via Claude) | Auto-intercept, two-phase gate, session scan |
 | [OpenClaw Plugin](/integrations/openclaw) | Hook | `openclaw plugin install` | Any (via OpenClaw) | 3 tools, safety-net hook, auto-key storage |
-| [TypeScript SDK](/sdk/overview) | SDK | `npm install @mandate/sdk` | TypeScript/JS | MandateClient + MandateWallet, full control |
-| [CLI](/cli/overview) | CLI | `npx @mandate/cli` | Any (shell) | All operations, MCP server mode |
+| [TypeScript SDK](/sdk/overview) | SDK | `npm install @mandate.md/sdk` | TypeScript/JS | MandateClient + MandateWallet, full control |
+| [CLI](/cli/overview) | CLI | `npx @mandate.md/cli` | Any (shell) | All operations, MCP server mode |
 | [GOAT Plugin](/integrations/goat-sdk) | SDK | `npm install` | TypeScript | @Tool() pattern, transfer + x402 |
 | [AgentKit Provider](/integrations/agentkit) | SDK | `npm install` | TypeScript | WalletProvider + ActionProvider |
 | [ElizaOS Plugin](/integrations/elizaos) | SDK | `npm install` | TypeScript | 3 actions + wallet provider |

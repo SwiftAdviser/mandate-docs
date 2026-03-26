@@ -21,7 +21,7 @@ The agent MUST NOT execute the transaction. This is the single most important ru
 When the API returns a network error, timeout, or 5xx status, your agent should block the transaction and either retry with backoff or alert the operator. Here is the recommended pattern:
 
 ```typescript
-import { MandateError } from '@mandate/sdk';
+import { MandateError } from '@mandate.md/sdk';
 
 try {
   const result = await client.validate({ ... });

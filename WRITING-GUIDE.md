@@ -51,17 +51,23 @@ Paragraphs, code, tables...
 - Always show imports
 - Use realistic variable names (`runtimeKey`, not `key` or `foo`)
 - Show both success and error paths
-- Use code tabs in this order: TypeScript SDK, CLI, curl
+- Use code tabs in this order: TypeScript SDK, Python, CLI, curl
 
 ```mdx
 <CodeGroup>
   ```typescript TypeScript
-  import { MandateClient } from '@mandate/sdk';
+  import { MandateClient } from '@mandate.md/sdk';
   // ...
   ```
 
+  ```python Python
+  import os, requests
+  headers = {"Authorization": f"Bearer {os.environ['MANDATE_RUNTIME_KEY']}"}
+  resp = requests.post("https://app.mandate.md/api/validate", headers=headers, json={...})
+  ```
+
   ```bash CLI
-  npx @mandate/cli validate --action transfer --reason "..."
+  npx @mandate.md/cli validate --action transfer --reason "..."
   ```
 
   ```bash curl

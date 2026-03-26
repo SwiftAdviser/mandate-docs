@@ -16,7 +16,7 @@ MandateError (base)
 └── RiskBlockedError     (422)
 ```
 
-All error classes are exported from `@mandate/sdk`:
+All error classes are exported from `@mandate.md/sdk`:
 
 ```typescript
 import {
@@ -25,7 +25,7 @@ import {
   CircuitBreakerError,
   ApprovalRequiredError,
   RiskBlockedError,
-} from '@mandate/sdk';
+} from '@mandate.md/sdk';
 ```
 
 ---
@@ -196,7 +196,7 @@ import {
   ApprovalRequiredError,
   RiskBlockedError,
   MandateError,
-} from '@mandate/sdk';
+} from '@mandate.md/sdk';
 
 try {
   const result = await wallet.transfer(to, amount, tokenAddress);

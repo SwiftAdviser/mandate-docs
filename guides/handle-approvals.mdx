@@ -34,7 +34,7 @@ Here is the full pattern using `MandateClient` directly. This gives you maximum 
 
 <CodeGroup>
 ```typescript TypeScript
-import { MandateClient, ApprovalRequiredError } from '@mandate/sdk';
+import { MandateClient, ApprovalRequiredError } from '@mandate.md/sdk';
 
 const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY! });
 
@@ -65,7 +65,7 @@ try {
 ```
 
 ```bash CLI
-npx @mandate/cli approve <intentId> --timeout 3600
+npx @mandate.md/cli approve <intentId> --timeout 3600
 ```
 
 ```bash curl
@@ -90,7 +90,7 @@ The `waitForApproval()` method polls `GET /api/intents/{intentId}/status` at the
 `MandateWallet` provides `transferWithApproval()` and `sendTransactionWithApproval()` that handle the entire flow: validate, wait for approval if needed, sign, broadcast, and confirm. No manual try/catch required.
 
 ```typescript
-import { MandateWallet } from '@mandate/sdk';
+import { MandateWallet } from '@mandate.md/sdk';
 
 const wallet = new MandateWallet({
   runtimeKey: process.env.MANDATE_RUNTIME_KEY!,

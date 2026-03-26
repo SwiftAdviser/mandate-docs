@@ -19,7 +19,7 @@ Use the SDK, CLI, or raw HTTP. All three methods hit the same `POST /api/agents/
 
 <CodeGroup>
   ```typescript TypeScript
-  import { MandateClient } from '@mandate/sdk';
+  import { MandateClient } from '@mandate.md/sdk';
 
   const { agentId, runtimeKey, claimUrl, evmAddress } = await MandateClient.register({
     name: 'my-trading-agent',
@@ -37,12 +37,30 @@ Use the SDK, CLI, or raw HTTP. All three methods hit the same `POST /api/agents/
   ```
 
   ```bash CLI
-  npx @mandate/cli login \
+  npx @mandate.md/cli login \
     --name "my-trading-agent" \
     --address 0xYourAgentWalletAddress \
     --chainId 84532 \
     --perTxLimit 100 \
     --dailyLimit 1000
+  ```
+
+  ```python Python
+  import requests
+
+  resp = requests.post("https://app.mandate.md/api/agents/register", json={
+      "name": "my-trading-agent",
+      "evmAddress": "0xYourAgentWalletAddress",
+      "chainId": 84532,
+      "defaultPolicy": {
+          "spendLimitPerTxUsd": 100,
+          "spendLimitPerDayUsd": 1000,
+      },
+  })
+  data = resp.json()
+  print("Agent ID:", data["agentId"])
+  print("Runtime key:", data["runtimeKey"])  # Save securely
+  print("Claim URL:", data["claimUrl"])      # Share with wallet owner
   ```
 
   ```bash curl

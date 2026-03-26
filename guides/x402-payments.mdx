@@ -38,7 +38,7 @@ Agent                        Server
 `MandateWallet.x402Pay()` handles the entire flow in one call. It probes the URL, parses the 402 header, executes the transfer through Mandate validation, and retries with the payment proof.
 
 ```typescript
-import { MandateWallet } from '@mandate/sdk';
+import { MandateWallet } from '@mandate.md/sdk';
 
 const wallet = new MandateWallet({
   runtimeKey: process.env.MANDATE_RUNTIME_KEY!,

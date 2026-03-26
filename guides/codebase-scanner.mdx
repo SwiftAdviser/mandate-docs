@@ -15,7 +15,7 @@ The Mandate scanner finds wallet and transaction calls in your codebase that lac
 
 For each match, the scanner checks whether the file imports Mandate (`MandateClient`, `MandateWallet`, or `@mandate` imports) or whether the project has the SDK installed as a dependency. Calls without Mandate protection are flagged as unprotected.
 
-The scanner also recognizes project-level protection signals: `@mandate/sdk` in `package.json`, a `MANDATE.md` file in the project root, or a `.mandate/` configuration directory. When any of these exist, all findings are marked as protected.
+The scanner also recognizes project-level protection signals: `@mandate.md/sdk` in `package.json`, a `MANDATE.md` file in the project root, or a `.mandate/` configuration directory. When any of these exist, all findings are marked as protected.
 
 ## Run the scanner
 
@@ -23,19 +23,19 @@ Use the CLI to scan your codebase:
 
 ```bash
 # Scan current directory
-npx @mandate/cli scan
+npx @mandate.md/cli scan
 
 # Scan a specific directory
-npx @mandate/cli scan ./src/agents
+npx @mandate.md/cli scan ./src/agents
 
 # Output as JSON (for programmatic use)
-npx @mandate/cli scan --json
+npx @mandate.md/cli scan --json
 
 # Show all findings, including protected ones
-npx @mandate/cli scan --verbose
+npx @mandate.md/cli scan --verbose
 
 # Ignore specific directories
-npx @mandate/cli scan --ignore test,scripts
+npx @mandate.md/cli scan --ignore test,scripts
 ```
 
 The scanner checks `.ts`, `.js`, `.tsx`, and `.jsx` files. It skips `node_modules`, `dist`, `.git`, and `build` directories by default.
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npx @mandate/cli scan ./src
+      - run: npx @mandate.md/cli scan ./src
 ```
 
 ### Pre-commit hook
@@ -85,7 +85,7 @@ Block commits that introduce unprotected wallet calls:
 
 ```bash
 #!/bin/sh
-npx @mandate/cli scan ./src || exit 1
+npx @mandate.md/cli scan ./src || exit 1
 ```
 
 Save this as `.git/hooks/pre-commit` and make it executable with `chmod +x .git/hooks/pre-commit`. For team-wide enforcement, use a tool like [husky](https://github.com/typicode/husky) or [lefthook](https://github.com/evilmartians/lefthook) to distribute the hook.
@@ -95,7 +95,7 @@ Save this as `.git/hooks/pre-commit` and make it executable with `chmod +x .git/
 Use `--json` to get structured output for dashboards or Slack notifications:
 
 ```bash
-npx @mandate/cli scan --json | jq '.summary'
+npx @mandate.md/cli scan --json | jq '.summary'
 ```
 
 ```json

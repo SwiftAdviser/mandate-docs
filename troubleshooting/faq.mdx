@@ -174,6 +174,19 @@ const mandateWallet = new MandateWallet({
 
 Yes. Testnet usage is completely free. Use `mndt_test_*` keys with Sepolia or Base Sepolia. The full 14-check pipeline, approval workflows, audit log, and dashboard are available on testnet at no cost. Mainnet pricing is based on validated intents per month.
 
+### 21. What format does the `amount` field use?
+
+It depends on the method. The policy engine always evaluates in USD internally, but different SDK methods accept different input formats.
+
+| Method | Amount format | Example | Meaning |
+|--------|--------------|---------|---------|
+| `client.validate()` | USD string | `'50'` | $50 |
+| `wallet.transfer()` | Raw token units | `'5000000'` | 5 USDC (6 decimals) |
+| CLI `--amount` | USD string | `50` | $50 |
+| REST API `POST /validate` | USD string | `"50"` | $50 |
+
+The `validate()` endpoint and CLI accept human-readable USD amounts as strings. `MandateWallet.transfer()` accepts raw token units because it constructs the on-chain transaction directly. USDC has 6 decimals, so `'5000000'` equals 5 USDC. ETH has 18 decimals.
+
 ## Next Steps
 
 <CardGroup cols={3}>

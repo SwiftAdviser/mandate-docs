@@ -8,7 +8,7 @@ import InstallSdk from "/snippets/install-sdk.mdx";
 
 ## What is the Mandate SDK?
 
-The `@mandate/sdk` package is a TypeScript SDK for the Mandate policy layer. It provides two main classes: `MandateClient` for low-level API calls, and `MandateWallet` for a high-level flow that validates, signs, broadcasts, and confirms transactions in one call. The SDK throws typed errors for every failure mode, so your agent can react to policy blocks, approval requests, and circuit breaker trips.
+The `@mandate.md/sdk` package is a TypeScript SDK for the Mandate policy layer. It provides two main classes: `MandateClient` for low-level API calls, and `MandateWallet` for a high-level flow that validates, signs, broadcasts, and confirms transactions in one call. The SDK throws typed errors for every failure mode, so your agent can react to policy blocks, approval requests, and circuit breaker trips.
 
 ## Installation
 
@@ -19,7 +19,7 @@ The `@mandate/sdk` package is a TypeScript SDK for the Mandate policy layer. It 
 Create a `MandateClient` and validate a transaction against your policies.
 
 ```typescript
-import { MandateClient, PolicyBlockedError } from '@mandate/sdk';
+import { MandateClient, PolicyBlockedError } from '@mandate.md/sdk';
 
 const client = new MandateClient({
   runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
@@ -69,7 +69,7 @@ The SDK exposes the following from its main entry point.
 If you only need `MandateClient` and want a smaller bundle, import from the `/client` sub-path. This skips the viem dependency that `MandateWallet` requires.
 
 ```typescript
-import { MandateClient } from '@mandate/sdk/client';
+import { MandateClient } from '@mandate.md/sdk/client';
 ```
 
 <Tip>

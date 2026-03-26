@@ -25,7 +25,7 @@ The `validate()` method on `MandateClient` is the primary, recommended way to ch
 
 <CodeGroup>
   ```typescript TypeScript
-  import { MandateClient, PolicyBlockedError, ApprovalRequiredError } from '@mandate/sdk';
+  import { MandateClient, PolicyBlockedError, ApprovalRequiredError } from '@mandate.md/sdk';
 
   const client = new MandateClient({
     runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
@@ -56,12 +56,37 @@ The `validate()` method on `MandateClient` is the primary, recommended way to ch
   ```
 
   ```bash CLI
-  npx @mandate/cli validate \
+  npx @mandate.md/cli validate \
     --action transfer \
     --amount 50 \
     --to 0x036CbD53842c5426634e7929541eC2318f3dCF7e \
     --token USDC \
     --reason "Payment for API access - invoice #1234"
+  ```
+
+  ```python Python
+  import os, requests
+
+  headers = {
+      "Authorization": f"Bearer {os.environ['MANDATE_RUNTIME_KEY']}",
+      "Content-Type": "application/json",
+  }
+
+  resp = requests.post("https://app.mandate.md/api/validate", headers=headers, json={
+      "action": "transfer",
+      "amount": "50",
+      "to": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "token": "USDC",
+      "reason": "Payment for API access - invoice #1234",
+  })
+
+  data = resp.json()
+  if resp.status_code == 200 and data.get("allowed"):
+      print(f"Proceed with transaction. Intent: {data['intentId']}")
+  elif resp.status_code == 422:
+      print(f"Blocked: {data['blockReason']} - {data.get('blockDetail')}")
+  elif resp.status_code == 202:
+      print(f"Needs approval: {data['intentId']}")
   ```
 
   ```bash curl
@@ -84,7 +109,7 @@ The `validate()` method on `MandateClient` is the primary, recommended way to ch
 |-------|------|:--------:|-------------|
 | `action` | `string` | Yes | The type of transaction: `transfer`, `approve`, `swap`, or a custom action string |
 | `reason` | `string` | Yes | Why the agent wants to transact. Max 1,000 characters. Scanned for prompt injection. |
-| `amount` | `string` | No | Amount in USD or token units as a string |
+| `amount` | `string` | No | Amount in USD as a string (e.g., `'50'` means $50). This differs from `wallet.transfer()`, which takes raw token units. |
 | `to` | `string` | No | Destination address (checked against allowlist if configured) |
 | `token` | `string` | No | Token symbol: `USDC`, `ETH`, `WETH`, etc. |
 | `chain` | `string` | No | Chain name or identifier, e.g. `base-sepolia` |

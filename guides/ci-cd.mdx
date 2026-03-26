@@ -86,7 +86,7 @@ A call is marked **protected** if the file imports from `@mandate`, references `
 Wrap each unprotected transaction call with a `validate()` call in the same function scope. The minimal fix:
 
 ```typescript
-import { MandateClient } from '@mandate/sdk';
+import { MandateClient } from '@mandate.md/sdk';
 
 const client = new MandateClient({ runtimeKey: process.env.MANDATE_RUNTIME_KEY });
 

@@ -69,7 +69,7 @@ Dashboard users configure policies, review pending approvals, inspect the audit 
 
 ## How do the SDK packages fit in?
 
-The TypeScript monorepo in `packages/` provides SDK packages for 8 agent frameworks. The core package `@mandate/sdk` exports `MandateClient` (low-level API wrapper) and `MandateWallet` (high-level signing and broadcast flow with viem). Integration packages exist for ElizaOS, GOAT SDK, Coinbase AgentKit, Virtuals GAME, OpenClaw, ACP, and Claude Code.
+The TypeScript monorepo in `packages/` provides SDK packages for 8 agent frameworks. The core package `@mandate.md/sdk` exports `MandateClient` (low-level API wrapper) and `MandateWallet` (high-level signing and broadcast flow with viem). Integration packages exist for ElizaOS, GOAT SDK, Coinbase AgentKit, Virtuals GAME, OpenClaw, ACP, and Claude Code.
 
 All packages use bun workspaces and extend a shared `tsconfig.base.json` at the repo root. The SDK handles intent hash computation, error classification (5 error types), and approval polling automatically.
 

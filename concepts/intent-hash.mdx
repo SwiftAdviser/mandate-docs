@@ -49,10 +49,10 @@ With the intent hash, any modification produces a different hash. The server rec
 
 ## How does the SDK handle intent hash computation?
 
-The `@mandate/sdk` package exports `computeIntentHash()` from `intentHash.ts`. The `MandateWallet` class calls it automatically during `prepareTransaction()`. You do not need to compute the hash manually unless you are building a custom integration without the SDK.
+The `@mandate.md/sdk` package exports `computeIntentHash()` from `intentHash.ts`. The `MandateWallet` class calls it automatically during `prepareTransaction()`. You do not need to compute the hash manually unless you are building a custom integration without the SDK.
 
 ```typescript
-import { computeIntentHash } from '@mandate/sdk';
+import { computeIntentHash } from '@mandate.md/sdk';
 
 const hash = computeIntentHash({
   chainId: 84532,

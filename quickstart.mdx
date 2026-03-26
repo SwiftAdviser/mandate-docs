@@ -21,6 +21,9 @@ Pick the path that matches how you build:
   <Card title="CLI" icon="square-terminal" href="#cli">
     Validate from scripts, CI, or MCP server mode.
   </Card>
+  <Card title="Python / Any Language" icon="globe" href="#python--any-language">
+    REST API. Works with Python, Go, Rust, or any HTTP client.
+  </Card>
 </CardGroup>
 
 ---
@@ -125,11 +128,12 @@ const { runtimeKey, claimUrl } = await MandateClient.register({
 Store the `runtimeKey` in your `.env` file (`MANDATE_RUNTIME_KEY=mndt_test_...`). Never commit it to git. Share the `claimUrl` with the wallet owner to link the agent to the dashboard.
 </Warning>
 
-### Validate a transaction
+### Test validation (no wallet needed)
 
-Every transaction starts with `validate()`. This is the core security boundary.
+You can test the policy engine without a private key or wallet. This is the fastest way to verify your setup works.
 
 ```typescript
+// validate-test.ts — Run: bun run validate-test.ts
 import { MandateClient, PolicyBlockedError, ApprovalRequiredError } from '@mandate.md/sdk';
 
 const client = new MandateClient({
@@ -145,6 +149,7 @@ try {
     reason: 'Payment for API access - invoice #1234',
   });
   console.log('Allowed:', result.allowed);
+  console.log('Intent ID:', result.intentId);
 } catch (err) {
   if (err instanceof PolicyBlockedError) {
     console.log('Blocked:', err.blockReason, err.declineMessage);
@@ -156,9 +161,19 @@ try {
 }
 ```
 
+```
+Expected output:
+  Allowed: true
+  Intent ID: a1b2c3d4-...
+```
+
 ### Execute the transfer
 
 `MandateWallet` handles the full flow: validate, sign locally, broadcast, confirm. Your private key never leaves your machine.
+
+<Note>
+`validate()` accepts amounts in USD (e.g., `'50'` means $50). `wallet.transfer()` accepts raw token units (e.g., `'5000000'` means 5 USDC, because USDC has 6 decimals). The policy engine always evaluates in USD.
+</Note>
 
 ```typescript
 import { MandateWallet } from '@mandate.md/sdk';
@@ -177,7 +192,72 @@ const { txHash, intentId } = await wallet.transfer(
 );
 
 console.log('Transaction:', txHash);
+console.log('Intent ID:', intentId);
 ```
+
+```
+Expected output:
+  Transaction: 0x7a8b9c...
+  Intent ID: e5f6g7h8-...
+```
+
+<Accordion title="Complete runnable example (register + validate + transfer)">
+```typescript
+// quickstart.ts — Run: bun run quickstart.ts
+// Prerequisites: bun add @mandate.md/sdk viem
+// Set MANDATE_RUNTIME_KEY and AGENT_PRIVATE_KEY in .env
+
+import { MandateWallet, MandateClient, USDC, CHAIN_ID } from '@mandate.md/sdk';
+
+const RECIPIENT = '0x0000000000000000000000000000000000000001' as `0x${string}`;
+
+async function main() {
+  // Step 1: Register (skip if you already have a runtimeKey)
+  let runtimeKey = process.env.MANDATE_RUNTIME_KEY;
+
+  if (!runtimeKey) {
+    console.log('No runtimeKey found. Registering new agent...');
+    const reg = await MandateClient.register({
+      name: 'QuickstartAgent',
+      evmAddress: '0xYourWalletAddress' as `0x${string}`,
+      chainId: CHAIN_ID.BASE_SEPOLIA,
+    });
+    runtimeKey = reg.runtimeKey;
+    console.log(`Registered! runtimeKey: ${runtimeKey}`);
+    console.log(`Claim URL: ${reg.claimUrl}`);
+    console.log('Save runtimeKey to .env as MANDATE_RUNTIME_KEY');
+  }
+
+  // Step 2: Create MandateWallet
+  const wallet = new MandateWallet({
+    runtimeKey,
+    privateKey: process.env.AGENT_PRIVATE_KEY as `0x${string}`,
+    chainId: CHAIN_ID.BASE_SEPOLIA,
+  });
+
+  // Step 3: Transfer with policy enforcement
+  try {
+    const { txHash, intentId, status } = await wallet.transfer(
+      RECIPIENT,
+      '1000000', // 1 USDC (6 decimals)
+      USDC.BASE_SEPOLIA,
+    );
+    console.log('Transfer successful!');
+    console.log('  txHash:', txHash);
+    console.log('  intentId:', intentId);
+    console.log('  status:', status.status);
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'blockReason' in err) {
+      console.error('Blocked:', (err as { blockReason: string }).blockReason);
+    } else {
+      throw err;
+    }
+  }
+}
+
+main().catch(console.error);
+```
+</Accordion>
 
 **npm:** [@mandate.md/sdk](https://www.npmjs.com/package/@mandate.md/sdk)
 
@@ -227,6 +307,63 @@ npx @mandate.md/cli --mcp
 <Card title="Full CLI reference" icon="arrow-right" href="/cli/overview">
   All 10 commands, flags, credential storage, and MCP configuration.
 </Card>
+
+---
+
+## Python / Any Language
+
+No SDK needed. Call the REST API directly with any HTTP client.
+
+### Register
+
+```python
+import requests
+
+resp = requests.post("https://app.mandate.md/api/agents/register", json={
+    "name": "my-python-agent",
+    "evmAddress": "0xYourAgentWalletAddress",
+    "chainId": 84532,
+})
+data = resp.json()
+runtime_key = data["runtimeKey"]
+print(f"Runtime key: {runtime_key}")
+print(f"Claim URL: {data['claimUrl']}")
+# Save runtime_key to .env
+```
+
+### Validate
+
+```python
+import os, requests
+
+headers = {
+    "Authorization": f"Bearer {os.environ['MANDATE_RUNTIME_KEY']}",
+    "Content-Type": "application/json",
+}
+
+resp = requests.post("https://app.mandate.md/api/validate", headers=headers, json={
+    "action": "transfer",
+    "amount": "50",
+    "to": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "token": "USDC",
+    "reason": "Payment for API access - invoice #1234",
+})
+
+data = resp.json()
+if resp.status_code == 200 and data.get("allowed"):
+    print(f"Allowed. Intent: {data['intentId']}")
+elif resp.status_code == 422:
+    print(f"Blocked: {data['blockReason']} - {data.get('blockDetail')}")
+elif resp.status_code == 202:
+    print(f"Needs approval. Intent: {data['intentId']}")
+```
+
+```
+Expected output:
+  Allowed. Intent: a1b2c3d4-...
+```
+
+This pattern works with Python, Go, Rust, Ruby, or any language with an HTTP client. See the [REST API reference](/api-reference/overview) for all endpoints.
 
 ---
 

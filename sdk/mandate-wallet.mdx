@@ -17,7 +17,7 @@ description: "High-level policy-enforced wallet that validates, signs, broadcast
 Pass a raw hex private key directly. The SDK creates a viem wallet client internally.
 
 ```typescript
-import { MandateWallet } from '@mandate/sdk';
+import { MandateWallet } from '@mandate.md/sdk';
 
 const wallet = new MandateWallet({
   runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
@@ -32,7 +32,7 @@ const wallet = new MandateWallet({
 Wrap any existing wallet (Privy, AgentKit, Fireblocks) with the `ExternalSigner` interface. The SDK delegates signing to your implementation.
 
 ```typescript
-import { MandateWallet } from '@mandate/sdk';
+import { MandateWallet } from '@mandate.md/sdk';
 
 const wallet = new MandateWallet({
   runtimeKey: process.env.MANDATE_RUNTIME_KEY!,
@@ -292,7 +292,7 @@ interface ExternalSigner {
 
 ```typescript
 import { Wallet } from 'ethers';
-import { MandateWallet, type ExternalSigner } from '@mandate/sdk';
+import { MandateWallet, type ExternalSigner } from '@mandate.md/sdk';
 
 class EthersSigner implements ExternalSigner {
   constructor(private wallet: Wallet) {}
@@ -331,7 +331,7 @@ import {
   PolicyBlockedError,
   ApprovalRequiredError,
   CircuitBreakerError,
-} from '@mandate/sdk';
+} from '@mandate.md/sdk';
 
 try {
   await wallet.transfer(to, amount, token, { reason });
