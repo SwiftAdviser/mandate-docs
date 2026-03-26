@@ -34,7 +34,8 @@
   "navbar": {
     "links": [
       { "type": "github", "href": "https://github.com/SwiftAdviser/mandate-skill" },
-      { "label": "Community", "href": "https://t.me/mandate_md_chat" }
+      { "label": "Community", "href": "https://t.me/mandate_md_chat" },
+      { "label": "llms.txt for AI", "href": "https://docs.mandate.md/llms-full.txt" }
     ],
     "primary": {
       "type": "button",
