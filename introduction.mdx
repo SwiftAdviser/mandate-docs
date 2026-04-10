@@ -18,17 +18,20 @@ Mandate adds intent-aware validation. Every transaction carries a `reason` field
 Mandate is non-custodial. Your private key never leaves your machine. Mandate validates the intent, your agent signs locally, and an envelope verifier confirms the broadcast transaction matches what was validated.
 </Note>
 
-## Three things Mandate gives you
+## What Mandate gives you
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="Intent-aware decisions" icon="brain">
-    The `reason` field captures what session keys miss. Your agent states its purpose, and the policy engine scans for manipulation before the wallet is called.
+    Every transaction carries a reason. The policy engine scans it for manipulation before your wallet signs.
   </Card>
   <Card title="Risk prevention" icon="shield-halved">
-    14 validation checks on every transaction: spend limits, allowlists, schedule windows, risk screening, prompt injection detection. A circuit breaker can halt all activity instantly.
+    14 checks per transaction: spend limits, allowlists, schedules, prompt injection, risk screening. A circuit breaker halts activity if triggered.
   </Card>
   <Card title="Immutable audit log" icon="scroll">
-    Every transaction is logged with its stated purpose, validation result, and on-chain confirmation. Full record of what your agent did and why.
+    Every decision logged with purpose, result, and on-chain proof. A full record of what your agent did and why.
+  </Card>
+  <Card title="Works with your stack" icon="plug">
+    TypeScript SDK, Python via REST, CLI for scripts. Drop-in plugins for Claude Code, OpenClaw, GOAT, AgentKit, ElizaOS, and MCP.
   </Card>
 </CardGroup>
 
